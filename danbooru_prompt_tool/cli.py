@@ -39,6 +39,8 @@ def main(argv: list[str] | None = None) -> int:
     p_prompt.add_argument("--ollama-model")
     p_prompt.add_argument("--ollama-url")
     p_prompt.add_argument("--rating", default=None, help="general, sensitive, nsfw, explicit, or empty")
+    p_prompt.add_argument("--no-smart-formatting", action="store_true")
+    p_prompt.add_argument("--smart-format-max-fragments", type=int, default=None)
 
     p_search = sub.add_parser("search")
     add_db(p_search)
@@ -69,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
             ollama_model=args.ollama_model,
             ollama_url=args.ollama_url,
             default_rating=args.rating,
+            smart_formatting=False if args.no_ollama else not args.no_smart_formatting,
+            smart_format_max_fragments=args.smart_format_max_fragments,
         )
         print(result.prompt)
         print("\n# negative")

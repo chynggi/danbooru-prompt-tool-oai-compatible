@@ -48,6 +48,19 @@ TAG_SYNONYMS = {
     "truck_kun": ["truck", "road", "car_crash"],
     "guy": ["1boy", "male"],
     "man": ["1boy", "male"],
+    "catgirl": ["cat_ears", "tail", "animal_ears"],
+    "cat_girl": ["cat_ears", "tail", "animal_ears"],
+    "foxgirl": ["fox_ears", "tail", "animal_ears"],
+    "fox_girl": ["fox_ears", "tail", "animal_ears"],
+    "wolfgirl": ["wolf_ears", "tail", "animal_ears"],
+    "wolf_girl": ["wolf_ears", "tail", "animal_ears"],
+    "nekomimi": ["cat_ears"],
+    "bike": ["motorcycle"],
+    "motorbike": ["motorcycle"],
+    "riding_bike": ["riding_motorcycle", "on_motorcycle"],
+    "riding_motorbike": ["riding_motorcycle", "on_motorcycle"],
+    "glow": ["glowing"],
+    "glowing_fish": ["glowing", "fish"],
 }
 
 

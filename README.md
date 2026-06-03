@@ -21,6 +21,8 @@ Edit `.env` to choose the local model and defaults:
 DANBOORU_PROMPT_USE_OLLAMA=1
 DANBOORU_PROMPT_OLLAMA_MODEL=gemma4:e4b
 DANBOORU_PROMPT_OLLAMA_URL=http://127.0.0.1:11434
+DANBOORU_PROMPT_SMART_FORMATTING=1
+DANBOORU_PROMPT_SMART_FORMAT_MAX_FRAGMENTS=4
 DANBOORU_PROMPT_INCLUDE_DEFAULTS=1
 DANBOORU_PROMPT_DEFAULT_POSITIVE=masterpiece,best quality,amazing quality
 DANBOORU_PROMPT_DEFAULT_NEGATIVE=bad quality,worst quality,worst detail,sketch,censor
@@ -39,7 +41,9 @@ Current prompt-building logic:
    `butterflies -> butterfly` and `outdoor -> outdoors`.
 6. Rank matches by Danbooru post count and reject obvious conflicts such as
    two different eye colors.
-7. Add recommended Illustrious defaults unless the CLI/node disables them or
+7. If Smart formatting is enabled, send unresolved details back to Ollama and
+   append a few short natural-language fragments after the verified tags.
+8. Add recommended Illustrious defaults unless the CLI/node disables them or
    the user prompt asks not to use them.
 
 Prompt-level opt-outs:
@@ -49,7 +53,40 @@ no default tags
 no quality tags
 no negative defaults
 no rating tags
+no smart formatting
 ```
+
+## Smart Formatting
+
+Smart formatting is the second Ollama pass. The first pass proposes Danbooru
+tag candidates, SQLite resolves what it can, and Smart formatting asks Ollama
+to recover the important unmatched parts as short prompt fragments.
+
+Example output shape:
+
+```text
+score_9, score_8_up, score_7_up, score_6_up, masterpiece, best quality,
+amazing quality, nsfw, cat_ears, sitting, bed, bedroom, black_hair, red_eyes,
+oversized_sweater, tail, animal_ears, morning, soft morning light, cozy bedroom
+```
+
+Use it when a prompt contains relationships or atmosphere that Danbooru tags do
+not represent cleanly, such as `facing a dragon`, `soft morning light`,
+`peaceful expression`, or `glowing fish around her`.
+
+Turn it off in any of these ways:
+
+```bash
+python -m danbooru_prompt_tool prompt --no-smart-formatting "..."
+```
+
+```text
+no smart formatting
+```
+
+Or disable the `smart_formatting` checkbox in the ComfyUI node. The
+`smart_format_max_fragments` value controls how many unmatched fragments may be
+appended; `4` is the default.
 
 ## Quick Start
 
@@ -141,6 +178,16 @@ negative_prompt
 
 In the master workflows, `negative_prompt` is wired into the negative
 `CLIPTextEncode` node.
+
+The master workflows expose Smart formatting directly on the Danbooru node:
+
+```text
+smart_formatting
+smart_format_max_fragments
+```
+
+The `debug_matches` output shows the exact fragments appended by the second
+pass on a line beginning with `smart formatting:`.
 
 ## Illustrious / WAI Defaults
 

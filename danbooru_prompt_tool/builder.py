@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from .config import get_settings, normalize_rating
 from .database import TagDatabase, expand_candidates
-from .ollama import ollama_tag_candidates
+from .ollama import ollama_smart_fragments, ollama_tag_candidates
 
 
 SCORE_TAGS = ["score_9", "score_8_up", "score_7_up", "score_6_up"]
@@ -14,6 +14,7 @@ NO_DEFAULTS_RE = re.compile(r"\b(no|without|disable)\s+(default|recommended)\s+t
 NO_QUALITY_RE = re.compile(r"\b(no|without|disable)\s+quality\s+tags?\b", re.IGNORECASE)
 NO_NEGATIVE_RE = re.compile(r"\b(no|without|disable)\s+negative\s+(defaults?|tags?)\b", re.IGNORECASE)
 NO_RATING_RE = re.compile(r"\b(no|without|disable)\s+(rating|safety)\s+tags?\b", re.IGNORECASE)
+NO_SMART_FORMAT_RE = re.compile(r"\b(no|without|disable)\s+smart\s+format(?:ting)?\b", re.IGNORECASE)
 RATING_TAGS = {"general", "sensitive", "nsfw", "explicit"}
 
 
@@ -37,6 +38,8 @@ def build_prompt(
     include_defaults: bool | None = None,
     include_negative: bool = True,
     default_rating: str | None = None,
+    smart_formatting: bool | None = None,
+    smart_format_max_fragments: int | None = None,
 ) -> PromptResult:
     settings = get_settings()
     use_scoring = bool(USE_SCORING_RE.search(text))
@@ -44,6 +47,7 @@ def build_prompt(
     no_quality = bool(NO_QUALITY_RE.search(text))
     no_negative = bool(NO_NEGATIVE_RE.search(text))
     no_rating = bool(NO_RATING_RE.search(text))
+    no_smart_format = bool(NO_SMART_FORMAT_RE.search(text))
     clean_text = clean_control_phrases(text)
 
     if include_defaults is None:
@@ -64,6 +68,11 @@ def build_prompt(
     default_rating = normalize_rating(default_rating or "")
     if no_rating:
         default_rating = ""
+    if smart_formatting is None:
+        smart_formatting = settings.smart_formatting
+    smart_formatting = smart_formatting and not no_smart_format
+    if smart_format_max_fragments is None:
+        smart_format_max_fragments = settings.smart_format_max_fragments
 
     phrases: list[str] = []
     notes: list[str] = []
@@ -82,6 +91,7 @@ def build_prompt(
     phrases = dedupe(phrases)
 
     tags: list[str] = []
+    unresolved_phrases: list[str] = []
     seen = set()
     covered_words: set[str] = set()
 
@@ -91,10 +101,12 @@ def build_prompt(
         rows = db.search(phrase, limit=12, min_count=min_count)
         if not rows:
             notes.append(f"no tag match: {phrase}")
+            unresolved_phrases.append(phrase)
             continue
         row = choose_row(phrase, rows)
         if row is None:
             notes.append(f"no precise tag match: {phrase}")
+            unresolved_phrases.append(phrase)
             continue
         tag = row["name"]
         if tag in seen:
@@ -119,6 +131,24 @@ def build_prompt(
         prefix.append(default_rating)
 
     prompt_tags = dedupe(prefix + tags)
+    smart_fragments: list[str] = []
+    if smart_formatting and smart_format_max_fragments > 0:
+        filtered_unresolved = filter_unresolved_phrases(unresolved_phrases, covered_words)
+        if filtered_unresolved:
+            try:
+                smart_fragments = ollama_smart_fragments(
+                    clean_text,
+                    prompt_tags,
+                    filtered_unresolved,
+                    ollama_model,
+                    ollama_url,
+                    smart_format_max_fragments,
+                )
+                if smart_fragments:
+                    notes.append("smart formatting: " + ", ".join(smart_fragments))
+            except RuntimeError as exc:
+                notes.append(str(exc))
+    prompt_tags = dedupe(prompt_tags + smart_fragments)
     negative_tags = settings.negative_defaults if include_negative else []
     return PromptResult(", ".join(prompt_tags), ", ".join(dedupe(negative_tags)), tags, "\n".join(notes))
 
@@ -129,6 +159,7 @@ def clean_control_phrases(text: str) -> str:
     out = NO_QUALITY_RE.sub(" ", out)
     out = NO_NEGATIVE_RE.sub(" ", out)
     out = NO_RATING_RE.sub(" ", out)
+    out = NO_SMART_FORMAT_RE.sub(" ", out)
     return out
 
 
@@ -193,6 +224,27 @@ def dedupe(values: list[str]) -> list[str]:
     return out
 
 
+def filter_unresolved_phrases(phrases: list[str], covered_words: set[str]) -> list[str]:
+    filtered: list[str] = []
+    seen = set()
+    for phrase in phrases:
+        words = words_for_phrase(phrase)
+        if not words:
+            continue
+        if len(words) == 1 and words.intersection(covered_words):
+            continue
+        if len(words) == 1 and next(iter(words)) in {"guy", "man", "woman", "boy", "girl"}:
+            continue
+        if len(words) >= 2 and words.issubset(covered_words):
+            continue
+        key = " ".join(sorted(words))
+        if key in seen:
+            continue
+        seen.add(key)
+        filtered.append(phrase)
+    return filtered[:32]
+
+
 def conflicts_with_existing(tag: str, existing: set[str]) -> bool:
     groups = [
         {"red_eyes", "blue_eyes", "green_eyes", "yellow_eyes", "purple_eyes", "brown_eyes", "black_eyes"},
@@ -233,6 +285,8 @@ def extract_visual_compounds(words: list[str]) -> list[str]:
             compounds.append(f"{word} ears")
         if word in animal_mods and "tail" in nearby:
             compounds.append(f"{word} tail")
+        if word == "glowing" and "fish" in nearby:
+            compounds.append("glowing fish")
     return compounds
 
 
@@ -259,6 +313,18 @@ def extract_concept_tags(words: list[str]) -> list[str]:
         concepts.extend(["crash", "car_crash", "road", "debris", "motion_lines"])
     if word_set.intersection({"dramatic", "action", "dynamic"}):
         concepts.extend(["motion_lines", "speed_lines"])
+    if word_set.intersection({"catgirl", "nekomimi"}):
+        concepts.extend(["cat_ears", "tail", "animal_ears"])
+    if word_set.intersection({"foxgirl"}):
+        concepts.extend(["fox_ears", "tail", "animal_ears"])
+    if word_set.intersection({"motorcycle", "motorbike", "bike"}) and word_set.intersection({"girl", "woman", "1girl"}):
+        concepts.extend(["1girl", "motorcycle", "on_motorcycle", "riding_motorcycle", "looking_at_viewer"])
+    if "mermaid" in word_set and "fish" in word_set:
+        concepts.extend(["mermaid", "fish", "underwater"])
+    if "glowing" in word_set and "fish" in word_set:
+        concepts.extend(["glowing", "fish"])
+    if word_set.intersection({"boy", "1boy", "guy", "man"}) and "sword" in word_set:
+        concepts.extend(["1boy", "sword", "holding_sword"])
     return concepts
 
 

@@ -31,11 +31,24 @@ def env_bool(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value.strip())
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
 @dataclass(frozen=True)
 class Settings:
     use_ollama: bool
     ollama_model: str
     ollama_url: str
+    smart_formatting: bool
+    smart_format_max_fragments: int
     positive_defaults: list[str]
     negative_defaults: list[str]
     default_rating: str
@@ -48,6 +61,8 @@ def get_settings(env_path: str | Path = DEFAULT_ENV_PATH) -> Settings:
         use_ollama=env_bool("DANBOORU_PROMPT_USE_OLLAMA", True),
         ollama_model=os.environ.get("DANBOORU_PROMPT_OLLAMA_MODEL", "gemma4:e4b"),
         ollama_url=os.environ.get("DANBOORU_PROMPT_OLLAMA_URL", "http://127.0.0.1:11434"),
+        smart_formatting=env_bool("DANBOORU_PROMPT_SMART_FORMATTING", True),
+        smart_format_max_fragments=env_int("DANBOORU_PROMPT_SMART_FORMAT_MAX_FRAGMENTS", 4, 0, 10),
         positive_defaults=split_tags(
             os.environ.get(
                 "DANBOORU_PROMPT_DEFAULT_POSITIVE",
