@@ -18,6 +18,7 @@ Goals:
 Edit `.env` to choose the local model and defaults:
 
 ```env
+DANBOORU_PROMPT_MODEL_PRESET=wai_illustrious
 DANBOORU_PROMPT_USE_OLLAMA=1
 DANBOORU_PROMPT_OLLAMA_MODEL=gemma4:e4b
 DANBOORU_PROMPT_OLLAMA_URL=http://127.0.0.1:11434
@@ -28,6 +29,10 @@ DANBOORU_PROMPT_DEFAULT_POSITIVE=masterpiece,best quality,amazing quality
 DANBOORU_PROMPT_DEFAULT_NEGATIVE=bad quality,worst quality,worst detail,sketch,censor
 DANBOORU_PROMPT_DEFAULT_RATING=general
 ```
+
+`DANBOORU_PROMPT_MODEL_PRESET` controls the default quality tags, negative
+tags, score tags, and rating-tag vocabulary. Use `custom` if you want the tool
+to use only the explicit `.env` defaults.
 
 Current prompt-building logic:
 
@@ -188,6 +193,73 @@ smart_format_max_fragments
 
 The `debug_matches` output shows the exact fragments appended by the second
 pass on a line beginning with `smart formatting:`.
+
+## Model Presets
+
+The current default preset is `wai_illustrious`, because it matches the local
+`waiIllustriousSDXL_v170.safetensors` workflow best.
+
+Available presets:
+
+```text
+custom
+wai_illustrious
+illustrious_base
+noobai_xl
+animagine_xl_4
+kohaku_xl
+pony_v6
+```
+
+CLI example:
+
+```bash
+python -m danbooru_prompt_tool prompt \
+  --db data/danbooru_tags.sqlite \
+  --model-preset animagine_xl_4 \
+  "1girl with long black hair red eyes standing at sunset"
+```
+
+ComfyUI exposes the same setting as the `model_preset` dropdown on
+`Danbooru Prompt Builder`.
+
+Compatibility summary:
+
+| Preset | Best for | Prompt assumptions | Rating tags |
+| --- | --- | --- | --- |
+| `wai_illustrious` | WAI-Illustrious and most Illustrious finetunes | Danbooru tags plus `masterpiece, best quality, amazing quality`; optional `use scoring` | `general`, `sensitive`, `nsfw`, `explicit` |
+| `illustrious_base` | Illustrious XL base and conservative Illustrious derivatives | Danbooru tags, lighter quality prefix, larger negative list | `general`, `sensitive`, `nsfw`, `explicit` |
+| `noobai_xl` | NoobAI XL checkpoints and derivatives | Danbooru tags plus `masterpiece, best quality, newest, absurdres, highres` | `safe`, `sensitive`, `nsfw`, `explicit` |
+| `animagine_xl_4` | Animagine XL 4.0 | Danbooru tags plus score-like quality words such as `high score` and `great score` | `safe`, `sensitive`, `nsfw`, `explicit` |
+| `kohaku_xl` | Kohaku XL / anime booru SDXL derivatives | Danbooru tags with a simple quality prefix | `safe`, `sensitive`, `nsfw`, `explicit` |
+| `pony_v6` | Pony Diffusion V6 and Pony-derived mixes | Pony score tags are always added; add `source_anime`, `source_cartoon`, or `source_furry` yourself when useful | `rating_safe`, `rating_questionable`, `rating_explicit` |
+
+Practical guidance:
+
+- Use `wai_illustrious` for the current WAI workflow. It is the best default
+  for your recent tests.
+- Use `illustrious_base` when a model page says it is a raw Illustrious XL
+  checkpoint or behaves too strongly with WAI's `amazing quality` style.
+- Use `noobai_xl` only for NoobAI-derived checkpoints. Its default negative
+  prompt is SFW-oriented; when you choose `nsfw` or `explicit`, the tool removes
+  conflicting negative rating tags automatically.
+- Use `animagine_xl_4` for Animagine 4.0. It uses a different quality language
+  from WAI, so `high score` / `great score` is more appropriate than WAI's
+  `amazing quality`.
+- Use `pony_v6` only for Pony models or Pony LoRA stacks. Pony prompting is not
+  just Danbooru prompting; score tags, source tags, and `rating_*` tags matter.
+- Use `custom` when a model page gives a very specific positive/negative recipe
+  that does not fit one of these families.
+
+Reference model pages and docs:
+
+- [WAI-NSFW-illustrious-SDXL v16 mirror/notes](https://test-www.diffus.me/ja/models/wai-nsfw-illustrious-sdxl-v16-0)
+- [Illustrious XL Early Release on Hugging Face](https://huggingface.co/OnomaAIResearch/Illustrious-xl-early-release-v0)
+- [NoobAI XL on Hugging Face](https://huggingface.co/Laxhar/noobai-XL-1.1)
+- [NoobAI XL SeaArt guide](https://docs.seaart.ai/guide-1/6-permanent-events/high-quality-models-recommendation/noobai-xl)
+- [Animagine XL 4.0 on Hugging Face](https://huggingface.co/cagliostrolab/animagine-xl-4.0)
+- [Pony Diffusion V6 XL prompt guide](https://stable-diffusion-art.com/pony-diffusion-v6-xl/)
+- [Kohaku XL on Hugging Face](https://huggingface.co/KBlueLeaf/Kohaku-XL-Zeta)
 
 ## Illustrious / WAI Defaults
 

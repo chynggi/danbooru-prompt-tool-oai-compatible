@@ -44,6 +44,7 @@ def env_int(name: str, default: int, minimum: int, maximum: int) -> int:
 
 @dataclass(frozen=True)
 class Settings:
+    model_preset: str
     use_ollama: bool
     ollama_model: str
     ollama_url: str
@@ -58,6 +59,7 @@ class Settings:
 def get_settings(env_path: str | Path = DEFAULT_ENV_PATH) -> Settings:
     load_env(env_path)
     return Settings(
+        model_preset=os.environ.get("DANBOORU_PROMPT_MODEL_PRESET", "wai_illustrious"),
         use_ollama=env_bool("DANBOORU_PROMPT_USE_OLLAMA", True),
         ollama_model=os.environ.get("DANBOORU_PROMPT_OLLAMA_MODEL", "gemma4:e4b"),
         ollama_url=os.environ.get("DANBOORU_PROMPT_OLLAMA_URL", "http://127.0.0.1:11434"),

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from danbooru_prompt_tool.config import get_settings
 from danbooru_prompt_tool import TagDatabase, build_prompt
+from danbooru_prompt_tool.presets import preset_names
 
 
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "data" / "danbooru_tags.sqlite"
@@ -19,6 +20,7 @@ class DanbooruPromptBuilder:
                 "db_path": ("STRING", {"default": str(DEFAULT_DB), "multiline": False}),
                 "max_tags": ("INT", {"default": 18, "min": 1, "max": 80}),
                 "min_post_count": ("INT", {"default": 25, "min": 0, "max": 10_000_000}),
+                "model_preset": (preset_names(), {"default": settings.model_preset}),
                 "use_ollama": ("BOOLEAN", {"default": settings.use_ollama}),
                 "ollama_model": ("STRING", {"default": settings.ollama_model, "multiline": False}),
                 "ollama_url": ("STRING", {"default": settings.ollama_url, "multiline": False}),
@@ -45,6 +47,7 @@ class DanbooruPromptBuilder:
         db_path,
         max_tags,
         min_post_count,
+        model_preset,
         use_ollama,
         ollama_model,
         ollama_url,
@@ -62,6 +65,7 @@ class DanbooruPromptBuilder:
             limit=max_tags,
             min_count=min_post_count,
             include_quality=include_quality,
+            model_preset=model_preset,
             use_ollama=use_ollama,
             ollama_model=ollama_model,
             ollama_url=ollama_url,

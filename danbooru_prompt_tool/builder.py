@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from .config import get_settings, normalize_rating
 from .database import TagDatabase, expand_candidates
 from .ollama import ollama_smart_fragments, ollama_tag_candidates
+from .presets import get_preset
 
 
 SCORE_TAGS = ["score_9", "score_8_up", "score_7_up", "score_6_up"]
@@ -38,6 +39,7 @@ def build_prompt(
     include_defaults: bool | None = None,
     include_negative: bool = True,
     default_rating: str | None = None,
+    model_preset: str | None = None,
     smart_formatting: bool | None = None,
     smart_format_max_fragments: int | None = None,
 ) -> PromptResult:
@@ -63,6 +65,9 @@ def build_prompt(
         ollama_model = settings.ollama_model
     if ollama_url is None:
         ollama_url = settings.ollama_url
+    if model_preset is None:
+        model_preset = settings.model_preset
+    preset = get_preset(model_preset)
     if default_rating is None:
         default_rating = settings.default_rating
     default_rating = normalize_rating(default_rating or "")
@@ -76,6 +81,7 @@ def build_prompt(
 
     phrases: list[str] = []
     notes: list[str] = []
+    notes.append(f"model preset: {preset.label}")
     if use_ollama:
         try:
             planned_tags = ollama_tag_candidates(clean_text, ollama_model, ollama_url)
@@ -89,6 +95,7 @@ def build_prompt(
 
     phrases.extend(extract_phrases(clean_text))
     phrases = dedupe(phrases)
+    passthrough_tags = extract_passthrough_tags(clean_text, preset.name)
 
     tags: list[str] = []
     unresolved_phrases: list[str] = []
@@ -123,14 +130,24 @@ def build_prompt(
             break
 
     prefix = []
-    if use_scoring:
-        prefix.extend(SCORE_TAGS)
+    score_tags = list(preset.score_tags or SCORE_TAGS)
+    if use_scoring or (include_quality and preset.always_score):
+        prefix.extend(score_tags)
+    positive_defaults = settings.positive_defaults
+    negative_defaults = settings.negative_defaults
+    if preset.name != "custom":
+        positive_defaults = list(preset.positive_defaults)
+        negative_defaults = list(preset.negative_defaults)
     if include_quality:
-        prefix.extend(settings.positive_defaults)
-    if include_defaults and default_rating in RATING_TAGS:
-        prefix.append(default_rating)
+        prefix.extend(positive_defaults)
+    mapped_rating = ""
+    explicit_passthrough_rating = any(tag.startswith("rating_") for tag in passthrough_tags)
+    if include_defaults and default_rating in RATING_TAGS and not explicit_passthrough_rating:
+        mapped_rating = preset.rating_map.get(default_rating, default_rating)
+        if mapped_rating:
+            prefix.append(mapped_rating)
 
-    prompt_tags = dedupe(prefix + tags)
+    prompt_tags = dedupe(prefix + passthrough_tags + tags)
     smart_fragments: list[str] = []
     if smart_formatting and smart_format_max_fragments > 0:
         filtered_unresolved = filter_unresolved_phrases(unresolved_phrases, covered_words)
@@ -149,7 +166,9 @@ def build_prompt(
             except RuntimeError as exc:
                 notes.append(str(exc))
     prompt_tags = dedupe(prompt_tags + smart_fragments)
-    negative_tags = settings.negative_defaults if include_negative else []
+    negative_tags = negative_defaults if include_negative else []
+    if mapped_rating:
+        negative_tags = remove_conflicting_negative_ratings(negative_tags, mapped_rating)
     return PromptResult(", ".join(prompt_tags), ", ".join(dedupe(negative_tags)), tags, "\n".join(notes))
 
 
@@ -243,6 +262,35 @@ def filter_unresolved_phrases(phrases: list[str], covered_words: set[str]) -> li
         seen.add(key)
         filtered.append(phrase)
     return filtered[:32]
+
+
+def extract_passthrough_tags(text: str, preset_name: str) -> list[str]:
+    if preset_name != "pony_v6":
+        return []
+    allowed = (
+        "source_anime",
+        "source_cartoon",
+        "source_furry",
+        "source_pony",
+        "rating_safe",
+        "rating_questionable",
+        "rating_explicit",
+    )
+    found: list[str] = []
+    normalized = text.lower().replace("-", "_")
+    for tag in allowed:
+        if re.search(rf"\b{re.escape(tag)}\b", normalized):
+            found.append(tag)
+    return found
+
+
+def remove_conflicting_negative_ratings(negative_tags: list[str], positive_rating: str) -> list[str]:
+    conflicts = {positive_rating}
+    if positive_rating in {"nsfw", "explicit", "rating_questionable", "rating_explicit"}:
+        conflicts.update({"nsfw", "rating_questionable", "rating_explicit"})
+    if positive_rating == "safe":
+        conflicts.add("rating_safe")
+    return [tag for tag in negative_tags if tag not in conflicts]
 
 
 def conflicts_with_existing(tag: str, existing: set[str]) -> bool:
