@@ -1,5 +1,6 @@
 data/*.sqlite
 data/*.sqlite-*
 data/*.csv
+.env
 __pycache__/
 *.pyc

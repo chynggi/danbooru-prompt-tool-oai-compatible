@@ -33,6 +33,12 @@ def main(argv: list[str] | None = None) -> int:
     p_prompt.add_argument("--limit", type=int, default=18)
     p_prompt.add_argument("--min-count", type=int, default=25)
     p_prompt.add_argument("--no-quality", action="store_true")
+    p_prompt.add_argument("--no-defaults", action="store_true")
+    p_prompt.add_argument("--no-negative", action="store_true")
+    p_prompt.add_argument("--no-ollama", action="store_true")
+    p_prompt.add_argument("--ollama-model")
+    p_prompt.add_argument("--ollama-url")
+    p_prompt.add_argument("--rating", default=None, help="general, sensitive, nsfw, explicit, or empty")
 
     p_search = sub.add_parser("search")
     add_db(p_search)
@@ -51,8 +57,22 @@ def main(argv: list[str] | None = None) -> int:
         count = db.sync_danbooru(args.min_count, args.sleep, max_pages=args.max_pages)
         print(f"synced {count} tags into {Path(args.db).resolve()}")
     elif args.cmd == "prompt":
-        result = build_prompt(db, args.text, args.limit, args.min_count, not args.no_quality)
+        result = build_prompt(
+            db,
+            args.text,
+            limit=args.limit,
+            min_count=args.min_count,
+            include_quality=not args.no_quality,
+            include_defaults=not args.no_defaults,
+            include_negative=not args.no_negative,
+            use_ollama=not args.no_ollama,
+            ollama_model=args.ollama_model,
+            ollama_url=args.ollama_url,
+            default_rating=args.rating,
+        )
         print(result.prompt)
+        print("\n# negative")
+        print(result.negative_prompt)
         if result.notes:
             print("\n# matches")
             print(result.notes)

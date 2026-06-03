@@ -21,6 +21,36 @@ CATEGORY_NAMES = {
 }
 
 
+TAG_SYNONYMS = {
+    "outdoor": ["outdoors"],
+    "outside": ["outdoors"],
+    "open_air": ["outdoors"],
+    "butterflies": ["butterfly"],
+    "flowers": ["flower"],
+    "trees": ["tree"],
+    "clouds": ["cloud"],
+    "stars": ["starry_sky", "star"],
+    "woods": ["forest"],
+    "woodland": ["forest"],
+    "grassland": ["field", "grass"],
+    "impact": ["collision", "imminent_collision", "crash"],
+    "hit": ["imminent_hit", "collision"],
+    "struck": ["collision", "imminent_collision"],
+    "dramatic": ["motion_lines", "speed_lines"],
+    "drama": ["motion_lines"],
+    "action": ["dynamic_pose", "motion_lines", "speed_lines"],
+    "dynamic": ["dynamic_pose", "motion_lines"],
+    "movement": ["motion_lines", "motion_blur"],
+    "isekai": ["fantasy"],
+    "isekaid": ["fantasy"],
+    "truck-kun": ["truck", "road", "car_crash"],
+    "truckkun": ["truck", "road", "car_crash"],
+    "truck_kun": ["truck", "road", "car_crash"],
+    "guy": ["1boy", "male"],
+    "man": ["1boy", "male"],
+}
+
+
 STARTER_TAGS = [
     ("1girl", 0, 4_900_000, "girl,woman,female"),
     ("1boy", 0, 1_400_000, "boy,man,male"),
@@ -195,12 +225,12 @@ class TagDatabase:
         if not text:
             return []
         candidates = []
-        for candidate in (text, text.replace(" ", "_")):
+        for candidate in expand_candidates(text):
             if candidate and candidate not in candidates:
                 candidates.append(candidate)
         terms = [part for part in re.split(r"[^a-z0-9_]+", text.lower()) if len(part) > 1]
         if len(terms) == 1:
-            for term in terms:
+            for term in expand_candidates(terms[0]):
                 if term not in candidates:
                     candidates.append(term)
 
@@ -267,6 +297,42 @@ def clean_phrase(value: str) -> str:
     value = re.sub(r"[^\w\s()]+", " ", value)
     value = re.sub(r"\s+", " ", value)
     return value.strip()
+
+
+def expand_candidates(text: str) -> list[str]:
+    clean = clean_phrase(text)
+    if not clean:
+        return []
+    raw = [clean, clean.replace(" ", "_")]
+    expanded: list[str] = []
+    for candidate in raw:
+        for value in expand_single_candidate(candidate):
+            if value and value not in expanded:
+                expanded.append(value)
+    return expanded
+
+
+def expand_single_candidate(candidate: str) -> list[str]:
+    candidate = candidate.lower()
+    out = [candidate]
+    out.extend(TAG_SYNONYMS.get(candidate, []))
+    singular = singularize(candidate)
+    if singular != candidate:
+        out.append(singular)
+        out.extend(TAG_SYNONYMS.get(singular, []))
+    return out
+
+
+def singularize(value: str) -> str:
+    if value.endswith("ies") and len(value) > 4:
+        return value[:-3] + "y"
+    if value.endswith("ves") and len(value) > 4:
+        return value[:-3] + "f"
+    if value.endswith("ses") and len(value) > 4:
+        return value[:-2]
+    if value.endswith("s") and not value.endswith(("ss", "us")) and len(value) > 3:
+        return value[:-1]
+    return value
 
 
 def escape_fts(value: str) -> str:

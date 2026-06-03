@@ -7,9 +7,49 @@ Goals:
 
 - Store Danbooru tags and post counts locally in SQLite.
 - Let a user write natural language and get likely Danbooru tags back.
+- Use a local Ollama model as a planner when enabled, then verify/rank tags
+  against the local SQLite database.
 - Prefer common tags over obscure tags when several matches are possible.
 - Add score tags only when the input contains `use scoring`.
 - Expose the same logic as a CLI and as a ComfyUI custom node.
+
+## Configuration
+
+Edit `.env` to choose the local model and defaults:
+
+```env
+DANBOORU_PROMPT_USE_OLLAMA=1
+DANBOORU_PROMPT_OLLAMA_MODEL=gemma4:e4b
+DANBOORU_PROMPT_OLLAMA_URL=http://127.0.0.1:11434
+DANBOORU_PROMPT_INCLUDE_DEFAULTS=1
+DANBOORU_PROMPT_DEFAULT_POSITIVE=masterpiece,best quality,amazing quality
+DANBOORU_PROMPT_DEFAULT_NEGATIVE=bad quality,worst quality,worst detail,sketch,censor
+DANBOORU_PROMPT_DEFAULT_RATING=general
+```
+
+Current prompt-building logic:
+
+1. Remove control phrases such as `use scoring`, `no default tags`, and
+   `no negative defaults`.
+2. If Ollama is enabled, ask the configured model to turn the natural-language
+   request into Danbooru-style candidate tags.
+3. Resolve those candidates against the local SQLite Danbooru database.
+4. Fall back to lexical phrase extraction if Ollama is disabled or unavailable.
+5. Normalize common natural-language variants before matching, for example
+   `butterflies -> butterfly` and `outdoor -> outdoors`.
+6. Rank matches by Danbooru post count and reject obvious conflicts such as
+   two different eye colors.
+7. Add recommended Illustrious defaults unless the CLI/node disables them or
+   the user prompt asks not to use them.
+
+Prompt-level opt-outs:
+
+```text
+no default tags
+no quality tags
+no negative defaults
+no rating tags
+```
 
 ## Quick Start
 
@@ -91,6 +131,62 @@ score_9, score_8_up, score_7_up, score_6_up
 
 If not, score tags are omitted.
 
+The node outputs:
+
+```text
+prompt
+debug_matches
+negative_prompt
+```
+
+In the master workflows, `negative_prompt` is wired into the negative
+`CLIPTextEncode` node.
+
+## Illustrious / WAI Defaults
+
+Recommended generation settings for Illustrious-family checkpoints:
+
+```text
+Steps: 25-40
+CFG scale: 5-7
+Sampler: Euler a / euler_ancestral
+Original dimensions: larger than 1024x1024
+Hires upscale: 1.5
+Hires steps: 20
+Hires upscaler: R-ESRGAN 4x+ Anime6B
+Hires denoise: 0.35-0.5
+```
+
+The VAE is integrated in the checkpoint setup here; do not add a separate VAE
+unless you are deliberately testing a different model family.
+
+Recommended positive defaults:
+
+```text
+masterpiece,best quality,amazing quality
+```
+
+Recommended negative defaults:
+
+```text
+bad quality,worst quality,worst detail,sketch,censor
+```
+
+Safety/rating tags used by Illustrious-style datasets:
+
+```text
+general
+sensitive
+nsfw
+explicit
+```
+
+This tool defaults to `general` as a positive rating tag. To filter
+inappropriate content, consciously add `nsfw` to the negative prompt or set the
+negative defaults accordingly. To generate with another rating, set
+`DANBOORU_PROMPT_DEFAULT_RATING` or use the ComfyUI node's `default_rating`
+field.
+
 ## Data Sources
 
 Supported sources:
@@ -103,6 +199,6 @@ resume because it stores the last imported tag id in the database.
 
 ## Notes
 
-The first version uses lexical matching, aliases, and post-count ranking. It is
-designed to be predictable and easy to publish. A later version can add
-embeddings or call an LLM with this database as a retrieval tool.
+The LLM does not directly decide the final prompt. It proposes candidates; the
+local Danbooru database resolves and ranks the final tags. This keeps the output
+predictable and makes the tool publishable without depending on a hosted API.

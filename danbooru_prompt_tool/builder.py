@@ -3,17 +3,24 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .database import TagDatabase
+from .config import get_settings, normalize_rating
+from .database import TagDatabase, expand_candidates
+from .ollama import ollama_tag_candidates
 
 
 SCORE_TAGS = ["score_9", "score_8_up", "score_7_up", "score_6_up"]
-QUALITY_TAGS = ["masterpiece", "best quality", "amazing quality", "newest"]
 USE_SCORING_RE = re.compile(r"\buse\s+scoring\b", re.IGNORECASE)
+NO_DEFAULTS_RE = re.compile(r"\b(no|without|disable)\s+(default|recommended)\s+tags?\b", re.IGNORECASE)
+NO_QUALITY_RE = re.compile(r"\b(no|without|disable)\s+quality\s+tags?\b", re.IGNORECASE)
+NO_NEGATIVE_RE = re.compile(r"\b(no|without|disable)\s+negative\s+(defaults?|tags?)\b", re.IGNORECASE)
+NO_RATING_RE = re.compile(r"\b(no|without|disable)\s+(rating|safety)\s+tags?\b", re.IGNORECASE)
+RATING_TAGS = {"general", "sensitive", "nsfw", "explicit"}
 
 
 @dataclass
 class PromptResult:
     prompt: str
+    negative_prompt: str
     matched_tags: list[str]
     notes: str
 
@@ -23,21 +30,65 @@ def build_prompt(
     text: str,
     limit: int = 18,
     min_count: int = 25,
-    include_quality: bool = True,
+    include_quality: bool | None = None,
+    use_ollama: bool | None = None,
+    ollama_model: str | None = None,
+    ollama_url: str | None = None,
+    include_defaults: bool | None = None,
+    include_negative: bool = True,
+    default_rating: str | None = None,
 ) -> PromptResult:
+    settings = get_settings()
     use_scoring = bool(USE_SCORING_RE.search(text))
-    clean_text = USE_SCORING_RE.sub(" ", text)
-    phrases = extract_phrases(clean_text)
+    no_defaults = bool(NO_DEFAULTS_RE.search(text))
+    no_quality = bool(NO_QUALITY_RE.search(text))
+    no_negative = bool(NO_NEGATIVE_RE.search(text))
+    no_rating = bool(NO_RATING_RE.search(text))
+    clean_text = clean_control_phrases(text)
+
+    if include_defaults is None:
+        include_defaults = settings.include_defaults
+    include_defaults = include_defaults and not no_defaults
+    if include_quality is None:
+        include_quality = include_defaults
+    include_quality = include_quality and include_defaults and not no_quality
+    include_negative = include_negative and include_defaults and not no_negative
+    if use_ollama is None:
+        use_ollama = settings.use_ollama
+    if ollama_model is None:
+        ollama_model = settings.ollama_model
+    if ollama_url is None:
+        ollama_url = settings.ollama_url
+    if default_rating is None:
+        default_rating = settings.default_rating
+    default_rating = normalize_rating(default_rating or "")
+    if no_rating:
+        default_rating = ""
+
+    phrases: list[str] = []
+    notes: list[str] = []
+    if use_ollama:
+        try:
+            planned_tags = ollama_tag_candidates(clean_text, ollama_model, ollama_url)
+            if planned_tags:
+                phrases.extend(planned_tags)
+                notes.append(f"ollama model: {ollama_model}")
+                notes.append("ollama candidates: " + ", ".join(planned_tags))
+        except RuntimeError as exc:
+            notes.append(str(exc))
+            notes.append("fallback: lexical phrase extraction")
+
+    phrases.extend(extract_phrases(clean_text))
+    phrases = dedupe(phrases)
 
     tags: list[str] = []
-    notes: list[str] = []
     seen = set()
     covered_words: set[str] = set()
 
     for phrase in phrases:
         if is_covered_single_word(phrase, covered_words):
             continue
-        rows = db.search(phrase, limit=4, min_count=min_count)
+        rows = db.search(phrase, limit=12, min_count=min_count)
         if not rows:
             notes.append(f"no tag match: {phrase}")
             continue
@@ -63,10 +114,22 @@ def build_prompt(
     if use_scoring:
         prefix.extend(SCORE_TAGS)
     if include_quality:
-        prefix.extend(QUALITY_TAGS)
+        prefix.extend(settings.positive_defaults)
+    if include_defaults and default_rating in RATING_TAGS:
+        prefix.append(default_rating)
 
     prompt_tags = dedupe(prefix + tags)
-    return PromptResult(", ".join(prompt_tags), tags, "\n".join(notes))
+    negative_tags = settings.negative_defaults if include_negative else []
+    return PromptResult(", ".join(prompt_tags), ", ".join(dedupe(negative_tags)), tags, "\n".join(notes))
+
+
+def clean_control_phrases(text: str) -> str:
+    out = USE_SCORING_RE.sub(" ", text)
+    out = NO_DEFAULTS_RE.sub(" ", out)
+    out = NO_QUALITY_RE.sub(" ", out)
+    out = NO_NEGATIVE_RE.sub(" ", out)
+    out = NO_RATING_RE.sub(" ", out)
+    return out
 
 
 def extract_phrases(text: str) -> list[str]:
@@ -85,8 +148,13 @@ def extract_phrases(text: str) -> list[str]:
         "in",
         "on",
         "at",
+        "by",
         "to",
         "for",
+        "getting",
+        "being",
+        "gets",
+        "get",
         "image",
         "picture",
         "character",
@@ -95,6 +163,9 @@ def extract_phrases(text: str) -> list[str]:
         words = [word for word in chunk.split() if word not in stop]
         if not words:
             continue
+        for concept in extract_concept_tags(words):
+            if concept not in phrases:
+                phrases.append(concept)
         for subject in ("girl", "woman", "female", "boy", "man", "male"):
             if subject in words and subject not in phrases:
                 phrases.append(subject)
@@ -165,19 +236,51 @@ def extract_visual_compounds(words: list[str]) -> list[str]:
     return compounds
 
 
+def extract_concept_tags(words: list[str]) -> list[str]:
+    word_set = set(words)
+    concepts: list[str] = []
+    if word_set.intersection({"isekai", "isekaid", "isekaied"}) and "truck" in word_set:
+        concepts.extend(
+            [
+                "1boy",
+                "truck",
+                "road",
+                "crash",
+                "car_crash",
+                "falling",
+                "flying",
+                "debris",
+                "motion_lines",
+                "speed_lines",
+                "scared",
+            ]
+        )
+    if word_set.intersection({"impact", "collision", "crash"}) and word_set.intersection({"truck", "car", "vehicle"}):
+        concepts.extend(["crash", "car_crash", "road", "debris", "motion_lines"])
+    if word_set.intersection({"dramatic", "action", "dynamic"}):
+        concepts.extend(["motion_lines", "speed_lines"])
+    return concepts
+
+
 def choose_row(phrase: str, rows) -> object | None:
     terms = words_for_phrase(phrase)
     if len(terms) == 1:
         precise = [row for row in rows if is_precise_single_match(phrase, row)]
+        precise_general = [row for row in precise if row["category_name"] == "general"]
+        if precise_general:
+            return precise_general[0]
         return precise[0] if precise else None
+    general = [row for row in rows if row["category_name"] == "general"]
+    if general:
+        return general[0]
     return rows[0]
 
 
 def is_precise_single_match(phrase: str, row) -> bool:
-    phrase = phrase.lower().replace(" ", "_")
+    phrases = {candidate.lower().replace(" ", "_") for candidate in expand_candidates(phrase)}
     name = str(row["name"]).lower()
     aliases = [alias.strip().lower().replace(" ", "_") for alias in str(row["alias"]).split(",") if alias.strip()]
-    return name == phrase or phrase in aliases
+    return name in phrases or bool(phrases.intersection(aliases))
 
 
 def is_covered_single_word(phrase: str, covered_words: set[str]) -> bool:
