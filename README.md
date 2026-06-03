@@ -1,21 +1,130 @@
 # Danbooru Prompt Tool
 
-Offline Danbooru tag database and prompt helper for Illustrious/WAI-style image
-generation.
+Turn a plain-language image idea into a cleaner anime/booru prompt for ComfyUI.
 
-Goals:
+This tool uses a local Danbooru tag database plus an optional local Ollama model.
+The LLM proposes candidate tags, SQLite verifies them against real tag counts,
+and Smart Formatting repairs the pieces that do not map cleanly to tags.
 
-- Store Danbooru tags and post counts locally in SQLite.
-- Let a user write natural language and get likely Danbooru tags back.
-- Use a local Ollama model as a planner when enabled, then verify/rank tags
-  against the local SQLite database.
-- Prefer common tags over obscure tags when several matches are possible.
-- Add score tags only when the input contains `use scoring`.
-- Expose the same logic as a CLI and as a ComfyUI custom node.
+![ComfyUI Danbooru Prompt Builder](Screenshot_20260603_233600.png)
+
+## What It Does
+
+- Converts natural language into Danbooru-style tags.
+- Ranks tag matches by local Danbooru post counts.
+- Shows a debug log explaining every match and miss.
+- Adds model-specific positive, negative, score, and rating tags through presets.
+- Preserves special tags for Pony-style models, such as `source_anime` and
+  `rating_explicit`.
+- Adds `score_9, score_8_up, score_7_up, score_6_up` only when the prompt says
+  `use scoring`, except for presets where score tags are required.
+- Runs inside ComfyUI as `Danbooru Prompt Builder`.
+- Also works from the command line.
+
+## Why This Exists
+
+SDXL anime models are less forgiving than older SD 1.5 workflows. A long natural
+sentence often contains concepts that do not exist as clean Danbooru tags, while
+short booru prompts can miss relationships, pose direction, lighting, or scene
+intent.
+
+This tool splits the job:
+
+1. Ollama reads your natural-language idea and proposes likely tags.
+2. SQLite checks those tags against a local Danbooru tag database.
+3. The resolver adds synonyms, common concept expansions, and conflict checks.
+4. Smart Formatting asks Ollama to recover the still-unmatched details as short
+   natural-language prompt fragments.
+5. The selected model preset adds the correct quality, rating, and negative tags.
+
+The LLM does not get final authority over the prompt. The database remains the
+source of truth for tag matching.
+
+## Current Status
+
+This is a working local tool, but it is still tuned from practical testing rather
+than a broad public benchmark.
+
+Known strengths:
+
+- WAI-Illustrious and Illustrious-style anime/furry prompting.
+- Prompt coherence improvements from Smart Formatting.
+- Debuggability: you can see which words matched and which did not.
+- ComfyUI workflows where you want to copy, edit, and iterate on prompts.
+
+Known limitations:
+
+- It is not a replacement for face/detail fixers such as ADetailer-style passes.
+- It does not guarantee perfect subject ownership, for example who holds a sword.
+- Model presets are best-effort defaults. Always prefer a checkpoint author's
+  latest model card when it conflicts with this README.
+- WAI-Anima support is experimental until the free Base 1.0 release is tested.
+
+## Requirements
+
+- Python 3.10 or newer.
+- A local Danbooru tag SQLite database created by this tool.
+- Optional: Ollama running locally for LLM candidate extraction and Smart
+  Formatting.
+- Optional: ComfyUI for the custom node workflow.
+
+Tested locally with:
+
+- ComfyUI `0.22.0`
+- Ollama model `gemma4:e4b`
+- WAI-Illustrious SDXL workflow
+
+## Quick Start
+
+Clone the repo and enter it:
+
+```bash
+git clone <your-repo-url>
+cd danbooru-prompt-tool
+```
+
+Create or edit `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Seed a small starter database:
+
+```bash
+python -m danbooru_prompt_tool seed --db data/danbooru_tags.sqlite
+```
+
+Build a prompt:
+
+```bash
+python -m danbooru_prompt_tool prompt \
+  --db data/danbooru_tags.sqlite \
+  "use scoring catgirl sitting on a bed, black hair, red eyes, soft morning light"
+```
+
+Search tags directly:
+
+```bash
+python -m danbooru_prompt_tool search \
+  --db data/danbooru_tags.sqlite \
+  "long hair"
+```
+
+For production use, import a full tag CSV or sync from Danbooru:
+
+```bash
+python -m danbooru_prompt_tool sync-danbooru \
+  --db data/danbooru_tags.sqlite \
+  --min-count 50
+```
+
+Danbooru has rate limits. The sync command sleeps between requests and resumes
+from the last imported tag id.
 
 ## Configuration
 
-Edit `.env` to choose the local model and defaults:
+`.env.example` contains the main settings:
 
 ```env
 DANBOORU_PROMPT_MODEL_PRESET=wai_illustrious
@@ -30,148 +139,30 @@ DANBOORU_PROMPT_DEFAULT_NEGATIVE=bad quality,worst quality,worst detail,sketch,c
 DANBOORU_PROMPT_DEFAULT_RATING=general
 ```
 
-`DANBOORU_PROMPT_MODEL_PRESET` controls the default quality tags, negative
-tags, score tags, and rating-tag vocabulary. Use `custom` if you want the tool
-to use only the explicit `.env` defaults.
+Use `DANBOORU_PROMPT_MODEL_PRESET=custom` if you want only the explicit `.env`
+positive and negative defaults.
 
-Current prompt-building logic:
+## ComfyUI Setup
 
-1. Remove control phrases such as `use scoring`, `no default tags`, and
-   `no negative defaults`.
-2. If Ollama is enabled, ask the configured model to turn the natural-language
-   request into Danbooru-style candidate tags.
-3. Resolve those candidates against the local SQLite Danbooru database.
-4. Fall back to lexical phrase extraction if Ollama is disabled or unavailable.
-5. Normalize common natural-language variants before matching, for example
-   `butterflies -> butterfly` and `outdoor -> outdoors`.
-6. Rank matches by Danbooru post count and reject obvious conflicts such as
-   two different eye colors.
-7. If Smart formatting is enabled, send unresolved details back to Ollama and
-   append a few short natural-language fragments after the verified tags.
-8. Add recommended Illustrious defaults unless the CLI/node disables them or
-   the user prompt asks not to use them.
-
-Prompt-level opt-outs:
+Install or link this folder into ComfyUI:
 
 ```text
-no default tags
-no quality tags
-no negative defaults
-no rating tags
-no smart formatting
+ComfyUI/custom_nodes/danbooru_prompt_tool/
 ```
 
-## Smart Formatting
-
-Smart formatting is the second Ollama pass. The first pass proposes Danbooru
-tag candidates, SQLite resolves what it can, and Smart formatting asks Ollama
-to recover the important unmatched parts as short prompt fragments.
-
-Example output shape:
-
-```text
-score_9, score_8_up, score_7_up, score_6_up, masterpiece, best quality,
-amazing quality, nsfw, cat_ears, sitting, bed, bedroom, black_hair, red_eyes,
-oversized_sweater, tail, animal_ears, morning, soft morning light, cozy bedroom
-```
-
-Use it when a prompt contains relationships or atmosphere that Danbooru tags do
-not represent cleanly, such as `facing a dragon`, `soft morning light`,
-`peaceful expression`, or `glowing fish around her`.
-
-Turn it off in any of these ways:
-
-```bash
-python -m danbooru_prompt_tool prompt --no-smart-formatting "..."
-```
-
-```text
-no smart formatting
-```
-
-Or disable the `smart_formatting` checkbox in the ComfyUI node. The
-`smart_format_max_fragments` value controls how many unmatched fragments may be
-appended; `4` is the default.
-
-## Quick Start
-
-Seed a small starter database:
-
-```bash
-python -m danbooru_prompt_tool seed --db data/danbooru_tags.sqlite
-```
-
-Build a prompt:
-
-```bash
-python -m danbooru_prompt_tool prompt \
-  --db data/danbooru_tags.sqlite \
-  "use scoring girl with long black hair red eyes standing at sunset"
-```
-
-Search tags directly:
-
-```bash
-python -m danbooru_prompt_tool search \
-  --db data/danbooru_tags.sqlite \
-  "long hair"
-```
-
-Sync from Danbooru's public API:
-
-```bash
-python -m danbooru_prompt_tool sync-danbooru \
-  --db data/danbooru_tags.sqlite \
-  --min-count 50
-```
-
-Import a CSV with `name`, `post_count`/`count`, and optional `category` columns:
-
-```bash
-python -m danbooru_prompt_tool import-csv \
-  --db data/danbooru_tags.sqlite \
-  --csv path/to/danbooru_tags.csv
-```
-
-This workspace currently has a local SQLite database at:
-
-```text
-data/danbooru_tags.sqlite
-```
-
-It was seeded from `data/danbooru_tags.csv`, then completed through the public
-Danbooru tag API. Current local count: `1,031,377` tags.
-
-## ComfyUI Connector
-
-This workspace installs a lightweight loader at:
-
-```text
-../ComfyUI/custom_nodes/danbooru_prompt_tool/
-```
-
-After restarting ComfyUI, add:
+Restart ComfyUI. Add this node:
 
 ```text
 Danbooru Prompt Builder
 ```
 
-Connect your natural-language `TextInputBasic` output into it, then connect
-`prompt` into `CLIPTextEncode`.
-
-The node is registered under:
+Typical wiring:
 
 ```text
-local/prompt
+TextInputBasic -> Danbooru Prompt Builder -> LoRA Trigger Prompt Builder -> CLIPTextEncode
+Danbooru Prompt Builder negative_prompt -> negative CLIPTextEncode
+Danbooru Prompt Builder debug_matches -> ShowText
 ```
-
-If your text contains `use scoring`, the output starts with:
-
-```text
-score_9, score_8_up, score_7_up, score_6_up
-```
-
-If not, score tags are omitted.
 
 The node outputs:
 
@@ -181,23 +172,69 @@ debug_matches
 negative_prompt
 ```
 
-In the master workflows, `negative_prompt` is wired into the negative
-`CLIPTextEncode` node.
+Useful controls:
 
-The master workflows expose Smart formatting directly on the Danbooru node:
+- `model_preset`: model family preset.
+- `use_ollama`: first-pass LLM tag candidate extraction.
+- `smart_formatting`: second-pass repair for unmatched details.
+- `smart_format_max_fragments`: number of natural-language repair fragments.
+- `default_rating`: rating tag to inject through the preset.
+- `include_quality`: include preset quality tags.
+- `include_negative`: output preset negative prompt.
+
+## Smart Formatting
+
+Smart Formatting is the part that improved prompt coherence the most in local
+testing.
+
+Example input:
 
 ```text
-smart_formatting
-smart_format_max_fragments
+mermaid underwater, coral reef, blue hair, glowing fish, bubbles,
+sunlight rays, peaceful expression
 ```
 
-The `debug_matches` output shows the exact fragments appended by the second
-pass on a line beginning with `smart formatting:`.
+Example final prompt shape:
+
+```text
+masterpiece, best quality, amazing quality, sensitive, mermaid, underwater,
+coral_reef, blue_hair, glowing_fish, bubble, sunlight, sunlight rays,
+peaceful expression, gentle bubbles, serene atmosphere
+```
+
+Turn it off in the node, with the CLI flag, or inside the prompt:
+
+```bash
+python -m danbooru_prompt_tool prompt --no-smart-formatting "..."
+```
+
+```text
+no smart formatting
+```
+
+## Prompt Controls
+
+These phrases can be typed directly into the user prompt:
+
+```text
+use scoring
+no default tags
+no quality tags
+no negative defaults
+no rating tags
+no smart formatting
+```
+
+`use scoring` adds the WAI/Illustrious-style score prefix:
+
+```text
+score_9, score_8_up, score_7_up, score_6_up
+```
+
+Some presets always add their own score tags because the model family expects
+them.
 
 ## Model Presets
-
-The current default preset is `wai_illustrious`, because it matches the local
-`waiIllustriousSDXL_v170.safetensors` workflow best.
 
 Available presets:
 
@@ -208,10 +245,11 @@ illustrious_base
 noobai_xl
 animagine_xl_4
 kohaku_xl
+wai_anima
 pony_v6
 ```
 
-CLI example:
+Use a preset from the CLI:
 
 ```bash
 python -m danbooru_prompt_tool prompt \
@@ -220,40 +258,35 @@ python -m danbooru_prompt_tool prompt \
   "1girl with long black hair red eyes standing at sunset"
 ```
 
-ComfyUI exposes the same setting as the `model_preset` dropdown on
-`Danbooru Prompt Builder`.
+Preset guide:
 
-Compatibility summary:
-
-| Preset | Best for | Prompt assumptions | Rating tags |
+| Preset | Best For | Quality Tags | Rating Tags |
 | --- | --- | --- | --- |
-| `wai_illustrious` | WAI-Illustrious and most Illustrious finetunes | Danbooru tags plus `masterpiece, best quality, amazing quality`; optional `use scoring` | `general`, `sensitive`, `nsfw`, `explicit` |
-| `illustrious_base` | Illustrious XL base and conservative Illustrious derivatives | Danbooru tags, lighter quality prefix, larger negative list | `general`, `sensitive`, `nsfw`, `explicit` |
-| `noobai_xl` | NoobAI XL checkpoints and derivatives | Danbooru tags plus `masterpiece, best quality, newest, absurdres, highres` | `safe`, `sensitive`, `nsfw`, `explicit` |
-| `animagine_xl_4` | Animagine XL 4.0 | Danbooru tags plus score-like quality words such as `high score` and `great score` | `safe`, `sensitive`, `nsfw`, `explicit` |
-| `kohaku_xl` | Kohaku XL / anime booru SDXL derivatives | Danbooru tags with a simple quality prefix | `safe`, `sensitive`, `nsfw`, `explicit` |
-| `pony_v6` | Pony Diffusion V6 and Pony-derived mixes | Pony score tags are always added; add `source_anime`, `source_cartoon`, or `source_furry` yourself when useful | `rating_safe`, `rating_questionable`, `rating_explicit` |
+| `wai_illustrious` | WAI-Illustrious and most Illustrious finetunes | `masterpiece, best quality, amazing quality` | `general`, `sensitive`, `nsfw`, `explicit` |
+| `illustrious_base` | Illustrious XL base and conservative derivatives | `masterpiece, best quality` | `general`, `sensitive`, `nsfw`, `explicit` |
+| `noobai_xl` | NoobAI XL checkpoints | `masterpiece, best quality, newest, absurdres, highres` | `safe`, `sensitive`, `nsfw`, `explicit` |
+| `animagine_xl_4` | Animagine XL 4.0 | `masterpiece, high score, great score, absurdres` | `safe`, `sensitive`, `nsfw`, `explicit` |
+| `kohaku_xl` | Kohaku XL and related booru anime SDXL models | `masterpiece, best quality, great quality` | `safe`, `sensitive`, `nsfw`, `explicit` |
+| `wai_anima` | WAI-Anima / Anima preview | `masterpiece, best quality, score_9, score_8, score_7` | `general`, `sensitive`, `nsfw`, `explicit` |
+| `pony_v6` | Pony Diffusion V6 and Pony derivatives | `score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up` | `rating_safe`, `rating_questionable`, `rating_explicit` |
+| `custom` | Any model with a special recipe | Uses `.env` defaults | Uses `.env` defaults |
 
-Practical guidance:
+Notes:
 
-- Use `wai_illustrious` for the current WAI workflow. It is the best default
-  for your recent tests.
-- Use `illustrious_base` when a model page says it is a raw Illustrious XL
-  checkpoint or behaves too strongly with WAI's `amazing quality` style.
-- Use `noobai_xl` only for NoobAI-derived checkpoints. Its default negative
-  prompt is SFW-oriented; when you choose `nsfw` or `explicit`, the tool removes
-  conflicting negative rating tags automatically.
-- Use `animagine_xl_4` for Animagine 4.0. It uses a different quality language
-  from WAI, so `high score` / `great score` is more appropriate than WAI's
-  `amazing quality`.
-- Use `pony_v6` only for Pony models or Pony LoRA stacks. Pony prompting is not
-  just Danbooru prompting; score tags, source tags, and `rating_*` tags matter.
-- Use `custom` when a model page gives a very specific positive/negative recipe
-  that does not fit one of these families.
+- `wai_illustrious` is the default because it matches the tested local workflow.
+- `wai_anima` is experimental. The WAI-Anima page says the free Base 1.0 version
+  is planned for June 4, 2026. Test the released checkpoint before treating this
+  preset as final.
+- `pony_v6` preserves Pony source and rating tags, including `source_anime`,
+  `source_cartoon`, `source_furry`, `source_pony`, `rating_safe`,
+  `rating_questionable`, and `rating_explicit`.
+- `noobai_xl` removes conflicting negative rating tags when `nsfw` or `explicit`
+  is selected.
 
-Reference model pages and docs:
+## Model Reference Links
 
-- [WAI-NSFW-illustrious-SDXL v16 mirror/notes](https://test-www.diffus.me/ja/models/wai-nsfw-illustrious-sdxl-v16-0)
+- [WAI-NSFW-illustrious-SDXL v16 notes](https://test-www.diffus.me/ja/models/wai-nsfw-illustrious-sdxl-v16-0)
+- [WAI-Anima on Civitai](https://civitai.red/models/2544636/wai-anima)
 - [Illustrious XL Early Release on Hugging Face](https://huggingface.co/OnomaAIResearch/Illustrious-xl-early-release-v0)
 - [NoobAI XL on Hugging Face](https://huggingface.co/Laxhar/noobai-XL-1.1)
 - [NoobAI XL SeaArt guide](https://docs.seaart.ai/guide-1/6-permanent-events/high-quality-models-recommendation/noobai-xl)
@@ -261,63 +294,49 @@ Reference model pages and docs:
 - [Pony Diffusion V6 XL prompt guide](https://stable-diffusion-art.com/pony-diffusion-v6-xl/)
 - [Kohaku XL on Hugging Face](https://huggingface.co/KBlueLeaf/Kohaku-XL-Zeta)
 
-## Illustrious / WAI Defaults
-
-Recommended generation settings for Illustrious-family checkpoints:
+## Example Prompts
 
 ```text
-Steps: 25-40
-CFG scale: 5-7
-Sampler: Euler a / euler_ancestral
-Original dimensions: larger than 1024x1024
-Hires upscale: 1.5
-Hires steps: 20
-Hires upscaler: R-ESRGAN 4x+ Anime6B
-Hires denoise: 0.35-0.5
+use scoring catgirl sitting on a bed in a cozy bedroom, black hair, red eyes,
+oversized sweater, soft morning light
 ```
-
-The VAE is integrated in the checkpoint setup here; do not add a separate VAE
-unless you are deliberately testing a different model family.
-
-Recommended positive defaults:
 
 ```text
-masterpiece,best quality,amazing quality
+boy with sword facing a dragon in ruined castle, fire, smoke, dramatic lighting,
+debris, action pose
 ```
-
-Recommended negative defaults:
 
 ```text
-bad quality,worst quality,worst detail,sketch,censor
+mermaid underwater, coral reef, blue hair, glowing fish, bubbles, sunlight rays,
+peaceful expression
 ```
-
-Safety/rating tags used by Illustrious-style datasets:
 
 ```text
-general
-sensitive
-nsfw
-explicit
+fox girl eating ramen at a festival stall, yukata, lanterns, night, steam,
+happy expression
 ```
 
-This tool defaults to `general` as a positive rating tag. To filter
-inappropriate content, consciously add `nsfw` to the negative prompt or set the
-negative defaults accordingly. To generate with another rating, set
-`DANBOORU_PROMPT_DEFAULT_RATING` or use the ComfyUI node's `default_rating`
-field.
+## Development Notes
 
-## Data Sources
+The local test database currently contains over one million Danbooru tags. The
+database file is not intended to be committed to GitHub. Publish scripts and
+instructions, not the generated SQLite database.
 
-Supported sources:
+Useful checks:
 
-- Danbooru API `/tags.json`, paginated by tag id.
-- Hugging Face or other CSV exports with tag names and counts.
+```bash
+python -m compileall danbooru_prompt_tool comfyui_node
+python -m danbooru_prompt_tool prompt --db data/danbooru_tags.sqlite --no-ollama "catgirl black hair red eyes"
+```
 
-Danbooru has read-rate limits. The sync command sleeps between requests and can
-resume because it stores the last imported tag id in the database.
+## Roadmap Before Public Release
 
-## Notes
+- Test the released WAI-Anima Base 1.0 checkpoint and tune `wai_anima`.
+- Attach a cleaned public workflow JSON for Civitai users.
+- Add a short install video or image guide if needed.
+- Add packaging metadata if this should be installed through pip later.
 
-The LLM does not directly decide the final prompt. It proposes candidates; the
-local Danbooru database resolves and ranks the final tags. This keeps the output
-predictable and makes the tool publishable without depending on a hosted API.
+## License
+
+Add a license before publishing publicly. If you plan to accept outside
+contributions, choose the license before opening pull requests.
