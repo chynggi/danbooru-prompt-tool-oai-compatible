@@ -58,7 +58,8 @@ Known limitations:
 - It does not guarantee perfect subject ownership, for example who holds a sword.
 - Model presets are best-effort defaults. Always prefer a checkpoint author's
   latest model card when it conflicts with this README.
-- WAI-Anima support is experimental until the free Base 1.0 release is tested.
+- WAI-Anima Base 1.0 is supported through the `wai_anima` preset, but it uses a
+  different score format from WAI-Illustrious and Pony.
 
 ## Requirements
 
@@ -260,23 +261,22 @@ python -m danbooru_prompt_tool prompt \
 
 Preset guide:
 
-| Preset | Best For | Quality Tags | Rating Tags |
-| --- | --- | --- | --- |
-| `wai_illustrious` | WAI-Illustrious and most Illustrious finetunes | `masterpiece, best quality, amazing quality` | `general`, `sensitive`, `nsfw`, `explicit` |
-| `illustrious_base` | Illustrious XL base and conservative derivatives | `masterpiece, best quality` | `general`, `sensitive`, `nsfw`, `explicit` |
-| `noobai_xl` | NoobAI XL checkpoints | `masterpiece, best quality, newest, absurdres, highres` | `safe`, `sensitive`, `nsfw`, `explicit` |
-| `animagine_xl_4` | Animagine XL 4.0 | `masterpiece, high score, great score, absurdres` | `safe`, `sensitive`, `nsfw`, `explicit` |
-| `kohaku_xl` | Kohaku XL and related booru anime SDXL models | `masterpiece, best quality, great quality` | `safe`, `sensitive`, `nsfw`, `explicit` |
-| `wai_anima` | WAI-Anima / Anima preview | `masterpiece, best quality, score_9, score_8, score_7` | `general`, `sensitive`, `nsfw`, `explicit` |
-| `pony_v6` | Pony Diffusion V6 and Pony derivatives | `score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up` | `rating_safe`, `rating_questionable`, `rating_explicit` |
-| `custom` | Any model with a special recipe | Uses `.env` defaults | Uses `.env` defaults |
+| Preset | Best For | Positive Defaults | Negative Defaults | Rating Tags |
+| --- | --- | --- | --- | --- |
+| `wai_illustrious` | WAI-Illustrious and most Illustrious finetunes | `masterpiece, best quality, amazing quality` | `bad quality, worst quality, worst detail, sketch, censor` | `general`, `sensitive`, `nsfw`, `explicit` |
+| `illustrious_base` | Illustrious XL base and conservative derivatives | `masterpiece, best quality` | `worst quality, comic, multiple views, bad quality, low quality, lowres, displeasing, very displeasing, bad anatomy, bad hands, scan artifacts, monochrome, greyscale, signature, twitter username, jpeg artifacts, 2koma, 4koma, guro, extra digits, fewer digits` | `general`, `sensitive`, `nsfw`, `explicit` |
+| `noobai_xl` | NoobAI XL checkpoints | `masterpiece, best quality, newest, absurdres, highres` | `nsfw, worst quality, old, early, low quality, lowres, signature, username, logo, bad hands, mutated hands, mammal, anthro, furry, ambiguous form, feral, semi-anthro` | `safe`, `sensitive`, `nsfw`, `explicit` |
+| `animagine_xl_4` | Animagine XL 4.0 | `masterpiece, high score, great score, absurdres` | `lowres, bad anatomy, bad hands, text, error, missing finger, extra digits, fewer digits, cropped, worst quality, low quality, low score, bad score, average score, signature, watermark, username, blurry` | `safe`, `sensitive`, `nsfw`, `explicit` |
+| `kohaku_xl` | Kohaku XL and related booru anime SDXL models | `masterpiece, best quality, great quality` | `low quality, worst quality, lowres, bad anatomy, bad hands, signature, watermark` | `safe`, `sensitive`, `nsfw`, `explicit` |
+| `wai_anima` | WAI-Anima Base 1.0 | `masterpiece, best quality, score_9, score_8, score_7` | `worst quality, low quality, score_1, score_2, score_3, artist name, blurry, jpeg artifacts, lowres, censor` | `general`, `sensitive`, `nsfw`, `explicit` |
+| `pony_v6` | Pony Diffusion V6 and Pony derivatives | `score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up` | None by default; try `score_5, score_4, score_3, score_2, score_1, bad quality, low quality, bad anatomy, bad hands` if needed | `rating_safe`, `rating_questionable`, `rating_explicit` |
+| `custom` | Any model with a special recipe | Uses `.env` defaults | Uses `.env` defaults | Uses `.env` defaults |
 
 Notes:
 
 - `wai_illustrious` is the default because it matches the tested local workflow.
-- `wai_anima` is experimental. The WAI-Anima page says the free Base 1.0 version
-  is planned for June 4, 2026. Test the released checkpoint before treating this
-  preset as final.
+- `wai_anima` is not SDXL and should not use WAI/Pony `_up` score tags. Keep
+  `score_9, score_8, score_7` in that exact Anima form.
 - `pony_v6` preserves Pony source and rating tags, including `source_anime`,
   `source_cartoon`, `source_furry`, `source_pony`, `rating_safe`,
   `rating_questionable`, and `rating_explicit`.

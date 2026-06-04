@@ -129,17 +129,21 @@ def build_prompt(
         if len(tags) >= limit:
             break
 
-    prefix = []
     score_tags = list(preset.score_tags or SCORE_TAGS)
-    if use_scoring or (include_quality and preset.always_score):
-        prefix.extend(score_tags)
     positive_defaults = settings.positive_defaults
     negative_defaults = settings.negative_defaults
     if preset.name != "custom":
         positive_defaults = list(preset.positive_defaults)
         negative_defaults = list(preset.negative_defaults)
+
+    prefix = []
     if include_quality:
         prefix.extend(positive_defaults)
+    if use_scoring or (include_quality and preset.always_score):
+        if preset.name == "wai_anima":
+            prefix.extend(score_tags)
+        else:
+            prefix = score_tags + prefix
     mapped_rating = ""
     explicit_passthrough_rating = any(tag.startswith("rating_") for tag in passthrough_tags)
     if include_defaults and default_rating in RATING_TAGS and not explicit_passthrough_rating:
@@ -370,7 +374,7 @@ def extract_concept_tags(words: list[str]) -> list[str]:
     if "mermaid" in word_set and "fish" in word_set:
         concepts.extend(["mermaid", "fish", "underwater"])
     if "glowing" in word_set and "fish" in word_set:
-        concepts.extend(["glowing", "fish"])
+        concepts.append("glowing_fish")
     if word_set.intersection({"boy", "1boy", "guy", "man"}) and "sword" in word_set:
         concepts.extend(["1boy", "sword", "holding_sword"])
     return concepts
