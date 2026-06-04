@@ -311,11 +311,12 @@ Notes:
 - `wai_illustrious` is the default because it matches the tested local workflow.
 - `anima_base` and `wai_anima` are not SDXL and should not use WAI/Pony `_up`
   score tags. Keep `score_9, score_8, score_7` in that exact Anima form.
-- `anima_base` and `wai_anima` preserve comma-separated Anima artist/style chunks beginning
-  with `@`, for example `@artist name`. These are passed through unchanged
-  because Anima-family models use the `@` prefix to strengthen artist/style
-  conditioning. The protected chunks are skipped by SQLite/Ollama tag matching
-  so the tool does not add an unprefixed duplicate.
+- `anima_base` and `wai_anima` preserve Anima artist/style tags beginning
+  with `@`. Comma-separated chunks such as `@artist name`, inline tokens such
+  as `monster @style_token`, and weighted tokens such as `(@style_token:1.2)`
+  are passed through unchanged because Anima-family models use the `@` prefix
+  to strengthen artist/style conditioning. The protected tags are skipped by
+  SQLite/Ollama tag matching so the tool does not add an unprefixed duplicate.
 - `pony_v6` preserves Pony source and rating tags, including `source_anime`,
   `source_cartoon`, `source_furry`, `source_pony`, `rating_safe`,
   `rating_questionable`, and `rating_explicit`.

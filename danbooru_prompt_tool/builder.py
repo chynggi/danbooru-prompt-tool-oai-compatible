@@ -21,6 +21,7 @@ NO_DYNAMIC_SMART_FORMAT_RE = re.compile(
     re.IGNORECASE,
 )
 AT_STYLE_CHUNK_RE = re.compile(r"(^|[,;\n])\s*(\(*@[^,;\n]+)")
+AT_STYLE_INLINE_RE = re.compile(r"(?<![\w.])(\(?@[A-Za-z0-9][A-Za-z0-9_.-]*(?::[0-9.]+)?\)?)")
 RATING_TAGS = {"general", "sensitive", "nsfw", "explicit"}
 
 
@@ -223,15 +224,24 @@ def clean_control_phrases(text: str) -> str:
 
 def extract_at_style_tags(text: str) -> list[str]:
     tags: list[str] = []
+    chunk_spans: list[tuple[int, int]] = []
     for match in AT_STYLE_CHUNK_RE.finditer(text):
         tag = normalize_at_style_tag(match.group(2))
+        if tag:
+            tags.append(tag)
+            chunk_spans.append(match.span(2))
+    for match in AT_STYLE_INLINE_RE.finditer(text):
+        if any(start <= match.start(1) < end for start, end in chunk_spans):
+            continue
+        tag = normalize_at_style_tag(match.group(1))
         if tag:
             tags.append(tag)
     return dedupe(tags)
 
 
 def remove_at_style_tags(text: str) -> str:
-    return AT_STYLE_CHUNK_RE.sub(lambda match: match.group(1) + " ", text)
+    without_chunks = AT_STYLE_CHUNK_RE.sub(lambda match: match.group(1) + " ", text)
+    return AT_STYLE_INLINE_RE.sub(" ", without_chunks)
 
 
 def normalize_at_style_tag(value: str) -> str:
