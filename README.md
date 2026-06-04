@@ -134,6 +134,9 @@ DANBOORU_PROMPT_OLLAMA_MODEL=gemma4:e4b
 DANBOORU_PROMPT_OLLAMA_URL=http://127.0.0.1:11434
 DANBOORU_PROMPT_SMART_FORMATTING=1
 DANBOORU_PROMPT_SMART_FORMAT_MAX_FRAGMENTS=4
+DANBOORU_PROMPT_DYNAMIC_SMART_FORMATTING=1
+DANBOORU_PROMPT_DYNAMIC_SMART_FORMAT_MIN_FRAGMENTS=4
+DANBOORU_PROMPT_DYNAMIC_SMART_FORMAT_MAX_FRAGMENTS=20
 DANBOORU_PROMPT_INCLUDE_DEFAULTS=1
 DANBOORU_PROMPT_DEFAULT_POSITIVE=masterpiece,best quality,amazing quality
 DANBOORU_PROMPT_DEFAULT_NEGATIVE=bad quality,worst quality,worst detail,sketch,censor
@@ -178,7 +181,12 @@ Useful controls:
 - `model_preset`: model family preset.
 - `use_ollama`: first-pass LLM tag candidate extraction.
 - `smart_formatting`: second-pass repair for unmatched details.
-- `smart_format_max_fragments`: number of natural-language repair fragments.
+- `smart_format_max_fragments`: manual number of natural-language repair
+  fragments when dynamic mode is off. Set to `0` to skip repair fragments.
+- `dynamic_smart_formatting`: scales the repair fragment budget from short to
+  long prompts automatically.
+- `dynamic_smart_format_min_fragments`: lower bound for dynamic repair.
+- `dynamic_smart_format_max_fragments`: upper bound for dynamic repair.
 - `default_rating`: rating tag to inject through the preset.
 - `include_quality`: include preset quality tags.
 - `include_negative`: output preset negative prompt.
@@ -187,6 +195,16 @@ Useful controls:
 
 Smart Formatting is the part that improved prompt coherence the most in local
 testing.
+
+Dynamic Smart Formatting is enabled by default. Instead of forcing every prompt
+to use the same repair budget, it estimates prompt complexity from word count
+and comma/semicolon/newline chunks, then chooses a fragment cap between the
+configured min and max. Short prompts stay near `4`; dense prompts can rise up
+to `20`. This keeps simple prompts from getting over-expanded while preserving
+more of a difficult natural-language brief.
+
+Turn dynamic mode off when you want the manual
+`smart_format_max_fragments` value to be used exactly.
 
 Example input:
 
@@ -213,6 +231,17 @@ python -m danbooru_prompt_tool prompt --no-smart-formatting "..."
 no smart formatting
 ```
 
+To keep Smart Formatting on but use the manual fragment value, use the node
+toggle, the CLI flag, or this prompt phrase:
+
+```bash
+python -m danbooru_prompt_tool prompt --no-dynamic-smart-formatting "..."
+```
+
+```text
+no dynamic smart formatting
+```
+
 ## Prompt Controls
 
 These phrases can be typed directly into the user prompt:
@@ -224,6 +253,7 @@ no quality tags
 no negative defaults
 no rating tags
 no smart formatting
+no dynamic smart formatting
 ```
 
 `use scoring` adds the WAI/Illustrious-style score prefix:

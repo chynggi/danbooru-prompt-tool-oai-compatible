@@ -16,6 +16,10 @@ NO_QUALITY_RE = re.compile(r"\b(no|without|disable)\s+quality\s+tags?\b", re.IGN
 NO_NEGATIVE_RE = re.compile(r"\b(no|without|disable)\s+negative\s+(defaults?|tags?)\b", re.IGNORECASE)
 NO_RATING_RE = re.compile(r"\b(no|without|disable)\s+(rating|safety)\s+tags?\b", re.IGNORECASE)
 NO_SMART_FORMAT_RE = re.compile(r"\b(no|without|disable)\s+smart\s+format(?:ting)?\b", re.IGNORECASE)
+NO_DYNAMIC_SMART_FORMAT_RE = re.compile(
+    r"\b(no|without|disable)\s+dynamic\s+smart\s+format(?:ting)?\b",
+    re.IGNORECASE,
+)
 RATING_TAGS = {"general", "sensitive", "nsfw", "explicit"}
 
 
@@ -42,6 +46,9 @@ def build_prompt(
     model_preset: str | None = None,
     smart_formatting: bool | None = None,
     smart_format_max_fragments: int | None = None,
+    dynamic_smart_formatting: bool | None = None,
+    dynamic_smart_format_min_fragments: int | None = None,
+    dynamic_smart_format_max_fragments: int | None = None,
 ) -> PromptResult:
     settings = get_settings()
     use_scoring = bool(USE_SCORING_RE.search(text))
@@ -50,6 +57,7 @@ def build_prompt(
     no_negative = bool(NO_NEGATIVE_RE.search(text))
     no_rating = bool(NO_RATING_RE.search(text))
     no_smart_format = bool(NO_SMART_FORMAT_RE.search(text))
+    no_dynamic_smart_format = bool(NO_DYNAMIC_SMART_FORMAT_RE.search(text))
     clean_text = clean_control_phrases(text)
 
     if include_defaults is None:
@@ -78,10 +86,30 @@ def build_prompt(
     smart_formatting = smart_formatting and not no_smart_format
     if smart_format_max_fragments is None:
         smart_format_max_fragments = settings.smart_format_max_fragments
+    if dynamic_smart_formatting is None:
+        dynamic_smart_formatting = settings.dynamic_smart_formatting
+    dynamic_smart_formatting = dynamic_smart_formatting and not no_dynamic_smart_format
+    if dynamic_smart_format_min_fragments is None:
+        dynamic_smart_format_min_fragments = settings.dynamic_smart_format_min_fragments
+    if dynamic_smart_format_max_fragments is None:
+        dynamic_smart_format_max_fragments = settings.dynamic_smart_format_max_fragments
+    smart_format_max_fragments, dynamic_word_count, dynamic_chunk_count = resolve_smart_format_max_fragments(
+        clean_text,
+        smart_format_max_fragments,
+        dynamic_smart_formatting,
+        dynamic_smart_format_min_fragments,
+        dynamic_smart_format_max_fragments,
+    )
 
     phrases: list[str] = []
     notes: list[str] = []
     notes.append(f"model preset: {preset.label}")
+    if smart_formatting and dynamic_smart_formatting and smart_format_max_fragments > 0:
+        notes.append(
+            "dynamic smart formatting fragments: "
+            f"{smart_format_max_fragments} "
+            f"(words: {dynamic_word_count}, chunks: {dynamic_chunk_count})"
+        )
     if use_ollama:
         try:
             planned_tags = ollama_tag_candidates(clean_text, ollama_model, ollama_url)
@@ -183,7 +211,35 @@ def clean_control_phrases(text: str) -> str:
     out = NO_NEGATIVE_RE.sub(" ", out)
     out = NO_RATING_RE.sub(" ", out)
     out = NO_SMART_FORMAT_RE.sub(" ", out)
+    out = NO_DYNAMIC_SMART_FORMAT_RE.sub(" ", out)
     return out
+
+
+def resolve_smart_format_max_fragments(
+    text: str,
+    fixed_max: int | None,
+    dynamic: bool,
+    minimum: int | None,
+    maximum: int | None,
+) -> tuple[int, int, int]:
+    fixed_max = clamp_int(fixed_max, 0, 20)
+    if not dynamic or fixed_max <= 0:
+        return fixed_max, 0, 0
+
+    minimum = clamp_int(minimum, 0, 20)
+    maximum = clamp_int(maximum, minimum, 20)
+    words = re.findall(r"[a-zA-Z0-9_]+", text)
+    chunks = [chunk for chunk in re.split(r"[,;\n]+", text) if chunk.strip()]
+    estimated = ((len(words) + 11) // 12) + ((len(chunks) + 1) // 2)
+    return clamp_int(estimated, minimum, maximum), len(words), len(chunks)
+
+
+def clamp_int(value: int | None, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value if value is not None else minimum)
+    except (TypeError, ValueError):
+        parsed = minimum
+    return max(minimum, min(maximum, parsed))
 
 
 def extract_phrases(text: str) -> list[str]:
