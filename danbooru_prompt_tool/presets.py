@@ -13,6 +13,7 @@ class PromptPreset:
     rating_map: dict[str, str]
     score_tags: tuple[str, ...] = ()
     always_score: bool = False
+    preserve_at_style_tags: bool = False
 
 
 IDENTITY_RATINGS = {
@@ -156,6 +157,28 @@ PRESETS: dict[str, PromptPreset] = {
         negative_defaults=("low quality", "worst quality", "lowres", "bad anatomy", "bad hands", "signature", "watermark"),
         rating_map=SAFE_RATINGS,
     ),
+    "anima_base": PromptPreset(
+        name="anima_base",
+        label="Anima Base / Anima derivatives",
+        family="Anima",
+        positive_defaults=("masterpiece", "best quality"),
+        negative_defaults=(
+            "worst quality",
+            "low quality",
+            "score_1",
+            "score_2",
+            "score_3",
+            "artist name",
+            "blurry",
+            "jpeg artifacts",
+            "lowres",
+            "censor",
+        ),
+        rating_map=IDENTITY_RATINGS,
+        score_tags=("score_9", "score_8", "score_7"),
+        always_score=True,
+        preserve_at_style_tags=True,
+    ),
     "wai_anima": PromptPreset(
         name="wai_anima",
         label="WAI-Anima / Anima preview",
@@ -176,6 +199,7 @@ PRESETS: dict[str, PromptPreset] = {
         rating_map=IDENTITY_RATINGS,
         score_tags=("score_9", "score_8", "score_7"),
         always_score=True,
+        preserve_at_style_tags=True,
     ),
     "pony_v6": PromptPreset(
         name="pony_v6",

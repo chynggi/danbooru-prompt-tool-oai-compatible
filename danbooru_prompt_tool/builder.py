@@ -20,6 +20,7 @@ NO_DYNAMIC_SMART_FORMAT_RE = re.compile(
     r"\b(no|without|disable)\s+dynamic\s+smart\s+format(?:ting)?\b",
     re.IGNORECASE,
 )
+AT_STYLE_CHUNK_RE = re.compile(r"(^|[,;\n])\s*(\(*@[^,;\n]+)")
 RATING_TAGS = {"general", "sensitive", "nsfw", "explicit"}
 
 
@@ -76,6 +77,8 @@ def build_prompt(
     if model_preset is None:
         model_preset = settings.model_preset
     preset = get_preset(model_preset)
+    style_tags = extract_at_style_tags(clean_text) if preset.preserve_at_style_tags else []
+    lookup_text = remove_at_style_tags(clean_text) if style_tags else clean_text
     if default_rating is None:
         default_rating = settings.default_rating
     default_rating = normalize_rating(default_rating or "")
@@ -94,7 +97,7 @@ def build_prompt(
     if dynamic_smart_format_max_fragments is None:
         dynamic_smart_format_max_fragments = settings.dynamic_smart_format_max_fragments
     smart_format_max_fragments, dynamic_word_count, dynamic_chunk_count = resolve_smart_format_max_fragments(
-        clean_text,
+        lookup_text,
         smart_format_max_fragments,
         dynamic_smart_formatting,
         dynamic_smart_format_min_fragments,
@@ -112,7 +115,7 @@ def build_prompt(
         )
     if use_ollama:
         try:
-            planned_tags = ollama_tag_candidates(clean_text, ollama_model, ollama_url)
+            planned_tags = ollama_tag_candidates(lookup_text, ollama_model, ollama_url)
             if planned_tags:
                 phrases.extend(planned_tags)
                 notes.append(f"ollama model: {ollama_model}")
@@ -121,9 +124,12 @@ def build_prompt(
             notes.append(str(exc))
             notes.append("fallback: lexical phrase extraction")
 
-    phrases.extend(extract_phrases(clean_text))
+    if style_tags:
+        notes.append("preserved @ style tags: " + ", ".join(style_tags))
+
+    phrases.extend(extract_phrases(lookup_text))
     phrases = dedupe(phrases)
-    passthrough_tags = extract_passthrough_tags(clean_text, preset.name)
+    passthrough_tags = dedupe(style_tags + extract_passthrough_tags(clean_text, preset.name))
 
     tags: list[str] = []
     unresolved_phrases: list[str] = []
@@ -168,7 +174,7 @@ def build_prompt(
     if include_quality:
         prefix.extend(positive_defaults)
     if use_scoring or (include_quality and preset.always_score):
-        if preset.name == "wai_anima":
+        if preset.family == "Anima":
             prefix.extend(score_tags)
         else:
             prefix = score_tags + prefix
@@ -186,7 +192,7 @@ def build_prompt(
         if filtered_unresolved:
             try:
                 smart_fragments = ollama_smart_fragments(
-                    clean_text,
+                    lookup_text,
                     prompt_tags,
                     filtered_unresolved,
                     ollama_model,
@@ -213,6 +219,23 @@ def clean_control_phrases(text: str) -> str:
     out = NO_SMART_FORMAT_RE.sub(" ", out)
     out = NO_DYNAMIC_SMART_FORMAT_RE.sub(" ", out)
     return out
+
+
+def extract_at_style_tags(text: str) -> list[str]:
+    tags: list[str] = []
+    for match in AT_STYLE_CHUNK_RE.finditer(text):
+        tag = normalize_at_style_tag(match.group(2))
+        if tag:
+            tags.append(tag)
+    return dedupe(tags)
+
+
+def remove_at_style_tags(text: str) -> str:
+    return AT_STYLE_CHUNK_RE.sub(lambda match: match.group(1) + " ", text)
+
+
+def normalize_at_style_tag(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def resolve_smart_format_max_fragments(
