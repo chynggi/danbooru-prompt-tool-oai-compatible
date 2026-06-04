@@ -46,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     p_prompt.add_argument("--dynamic-smart-formatting", action=argparse.BooleanOptionalAction, default=None)
     p_prompt.add_argument("--dynamic-smart-format-min-fragments", type=int, default=None)
     p_prompt.add_argument("--dynamic-smart-format-max-fragments", type=int, default=None)
+    p_prompt.add_argument("--negative-prompt-base", default="")
 
     p_search = sub.add_parser("search")
     add_db(p_search)
@@ -82,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
             dynamic_smart_formatting=args.dynamic_smart_formatting,
             dynamic_smart_format_min_fragments=args.dynamic_smart_format_min_fragments,
             dynamic_smart_format_max_fragments=args.dynamic_smart_format_max_fragments,
+            negative_prompt_base=args.negative_prompt_base,
         )
         print(result.prompt)
         print("\n# negative")

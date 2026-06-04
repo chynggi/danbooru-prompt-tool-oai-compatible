@@ -191,7 +191,10 @@ Useful controls:
   adjustable from `1` to `100`.
 - `default_rating`: rating tag to inject through the preset.
 - `include_quality`: include preset quality tags.
-- `include_negative`: output preset negative prompt.
+- `negative_prompt_base`: editable hand-written negative prompt. This is placed
+  first in the negative output.
+- `include_negative`: append the selected preset's negative tags after
+  `negative_prompt_base`.
 
 ## Smart Formatting
 

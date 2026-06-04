@@ -51,6 +51,7 @@ def build_prompt(
     dynamic_smart_formatting: bool | None = None,
     dynamic_smart_format_min_fragments: int | None = None,
     dynamic_smart_format_max_fragments: int | None = None,
+    negative_prompt_base: str = "",
 ) -> PromptResult:
     settings = get_settings()
     use_scoring = bool(USE_SCORING_RE.search(text))
@@ -205,9 +206,11 @@ def build_prompt(
             except RuntimeError as exc:
                 notes.append(str(exc))
     prompt_tags = dedupe(prompt_tags + smart_fragments)
-    negative_tags = negative_defaults if include_negative else []
+    negative_tags = split_prompt_tags(negative_prompt_base)
+    negative_default_tags = negative_defaults if include_negative else []
     if mapped_rating:
-        negative_tags = remove_conflicting_negative_ratings(negative_tags, mapped_rating)
+        negative_default_tags = remove_conflicting_negative_ratings(negative_default_tags, mapped_rating)
+    negative_tags = dedupe(negative_tags + list(negative_default_tags))
     return PromptResult(", ".join(prompt_tags), ", ".join(dedupe(negative_tags)), tags, "\n".join(notes))
 
 
@@ -334,6 +337,10 @@ def dedupe(values: list[str]) -> list[str]:
         seen.add(key)
         out.append(value)
     return out
+
+
+def split_prompt_tags(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def filter_unresolved_phrases(phrases: list[str], covered_words: set[str]) -> list[str]:

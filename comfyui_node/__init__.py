@@ -42,6 +42,7 @@ class DanbooruPromptBuilder:
                 "include_quality": ("BOOLEAN", {"default": True}),
                 "include_negative": ("BOOLEAN", {"default": True}),
                 "default_rating": (["", "general", "sensitive", "nsfw", "explicit"], {"default": settings.default_rating}),
+                "negative_prompt_base": ("STRING", {"default": "", "multiline": True}),
             }
         }
 
@@ -69,6 +70,7 @@ class DanbooruPromptBuilder:
         include_quality,
         include_negative,
         default_rating,
+        negative_prompt_base="",
     ):
         db = TagDatabase(db_path)
         result = build_prompt(
@@ -89,6 +91,7 @@ class DanbooruPromptBuilder:
             include_defaults=include_defaults,
             include_negative=include_negative,
             default_rating=default_rating,
+            negative_prompt_base=negative_prompt_base,
         )
         return (result.prompt, result.notes, result.negative_prompt)
 
