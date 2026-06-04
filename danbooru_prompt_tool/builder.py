@@ -222,12 +222,12 @@ def resolve_smart_format_max_fragments(
     minimum: int | None,
     maximum: int | None,
 ) -> tuple[int, int, int]:
-    fixed_max = clamp_int(fixed_max, 0, 20)
+    fixed_max = clamp_int(fixed_max, 0, 100)
     if not dynamic or fixed_max <= 0:
         return fixed_max, 0, 0
 
-    minimum = clamp_int(minimum, 0, 20)
-    maximum = clamp_int(maximum, minimum, 20)
+    minimum = clamp_int(minimum, 1, 100)
+    maximum = clamp_int(maximum, minimum, 100)
     words = re.findall(r"[a-zA-Z0-9_]+", text)
     chunks = [chunk for chunk in re.split(r"[,;\n]+", text) if chunk.strip()]
     estimated = ((len(words) + 11) // 12) + ((len(chunks) + 1) // 2)

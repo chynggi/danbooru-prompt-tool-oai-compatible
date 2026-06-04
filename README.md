@@ -185,8 +185,10 @@ Useful controls:
   fragments when dynamic mode is off. Set to `0` to skip repair fragments.
 - `dynamic_smart_formatting`: scales the repair fragment budget from short to
   long prompts automatically.
-- `dynamic_smart_format_min_fragments`: lower bound for dynamic repair.
-- `dynamic_smart_format_max_fragments`: upper bound for dynamic repair.
+- `dynamic_smart_format_min_fragments`: lower bound for dynamic repair,
+  adjustable from `1` to `100`.
+- `dynamic_smart_format_max_fragments`: upper bound for dynamic repair,
+  adjustable from `1` to `100`.
 - `default_rating`: rating tag to inject through the preset.
 - `include_quality`: include preset quality tags.
 - `include_negative`: output preset negative prompt.
@@ -199,8 +201,8 @@ testing.
 Dynamic Smart Formatting is enabled by default. Instead of forcing every prompt
 to use the same repair budget, it estimates prompt complexity from word count
 and comma/semicolon/newline chunks, then chooses a fragment cap between the
-configured min and max. Short prompts stay near `4`; dense prompts can rise up
-to `20`. This keeps simple prompts from getting over-expanded while preserving
+configured min and max. The default range is `4-20`; the adjustable range is
+`1-100`. This keeps simple prompts from getting over-expanded while preserving
 more of a difficult natural-language brief.
 
 Turn dynamic mode off when you want the manual

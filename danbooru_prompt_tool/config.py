@@ -67,10 +67,10 @@ def get_settings(env_path: str | Path = DEFAULT_ENV_PATH) -> Settings:
         ollama_model=os.environ.get("DANBOORU_PROMPT_OLLAMA_MODEL", "gemma4:e4b"),
         ollama_url=os.environ.get("DANBOORU_PROMPT_OLLAMA_URL", "http://127.0.0.1:11434"),
         smart_formatting=env_bool("DANBOORU_PROMPT_SMART_FORMATTING", True),
-        smart_format_max_fragments=env_int("DANBOORU_PROMPT_SMART_FORMAT_MAX_FRAGMENTS", 4, 0, 20),
+        smart_format_max_fragments=env_int("DANBOORU_PROMPT_SMART_FORMAT_MAX_FRAGMENTS", 4, 0, 100),
         dynamic_smart_formatting=env_bool("DANBOORU_PROMPT_DYNAMIC_SMART_FORMATTING", True),
-        dynamic_smart_format_min_fragments=env_int("DANBOORU_PROMPT_DYNAMIC_SMART_FORMAT_MIN_FRAGMENTS", 4, 0, 20),
-        dynamic_smart_format_max_fragments=env_int("DANBOORU_PROMPT_DYNAMIC_SMART_FORMAT_MAX_FRAGMENTS", 20, 0, 20),
+        dynamic_smart_format_min_fragments=env_int("DANBOORU_PROMPT_DYNAMIC_SMART_FORMAT_MIN_FRAGMENTS", 4, 1, 100),
+        dynamic_smart_format_max_fragments=env_int("DANBOORU_PROMPT_DYNAMIC_SMART_FORMAT_MAX_FRAGMENTS", 20, 1, 100),
         positive_defaults=split_tags(
             os.environ.get(
                 "DANBOORU_PROMPT_DEFAULT_POSITIVE",

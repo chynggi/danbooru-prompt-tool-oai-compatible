@@ -27,16 +27,16 @@ class DanbooruPromptBuilder:
                 "smart_formatting": ("BOOLEAN", {"default": settings.smart_formatting}),
                 "smart_format_max_fragments": (
                     "INT",
-                    {"default": settings.smart_format_max_fragments, "min": 0, "max": 20},
+                    {"default": settings.smart_format_max_fragments, "min": 0, "max": 100},
                 ),
                 "dynamic_smart_formatting": ("BOOLEAN", {"default": settings.dynamic_smart_formatting}),
                 "dynamic_smart_format_min_fragments": (
                     "INT",
-                    {"default": settings.dynamic_smart_format_min_fragments, "min": 0, "max": 20},
+                    {"default": settings.dynamic_smart_format_min_fragments, "min": 1, "max": 100},
                 ),
                 "dynamic_smart_format_max_fragments": (
                     "INT",
-                    {"default": settings.dynamic_smart_format_max_fragments, "min": 0, "max": 20},
+                    {"default": settings.dynamic_smart_format_max_fragments, "min": 1, "max": 100},
                 ),
                 "include_defaults": ("BOOLEAN", {"default": settings.include_defaults}),
                 "include_quality": ("BOOLEAN", {"default": True}),
