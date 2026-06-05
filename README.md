@@ -2,11 +2,12 @@
 
 Turn a plain-language image idea into a cleaner anime/booru prompt for ComfyUI.
 
-This tool uses a local Danbooru tag database plus an optional local Ollama model.
-The LLM proposes candidate tags, SQLite verifies them against real tag counts,
-and Smart Formatting repairs the pieces that do not map cleanly to tags.
+This custom node uses a local Danbooru tag database plus an optional local
+Ollama model. The LLM proposes candidate tags, SQLite verifies them against
+real Danbooru tag counts, and Smart Formatting repairs the pieces that do not
+map cleanly to tags.
 
-![ComfyUI Danbooru Prompt Builder](Screenshot_20260603_233600.png)
+![ComfyUI Danbooru Prompt Builder](Screenshot_20260605_083422.png)
 
 ## What It Does
 
@@ -16,6 +17,11 @@ and Smart Formatting repairs the pieces that do not map cleanly to tags.
 - Adds model-specific positive, negative, score, and rating tags through presets.
 - Preserves special tags for Pony-style models, such as `source_anime` and
   `rating_explicit`.
+- Preserves Anima `@style` tags, including inline and weighted forms such as
+  `@bluethebone` and `(@style_token:1.2)`.
+- Lets you hand-edit a negative prompt base while still appending preset
+  negative tags after it.
+- Dynamically scales Smart Formatting from short prompts to long scene briefs.
 - Adds `score_9, score_8_up, score_7_up, score_6_up` only when the prompt says
   `use scoring`, except for presets where score tags are required.
 - Runs inside ComfyUI as `Danbooru Prompt Builder`.
@@ -42,15 +48,19 @@ source of truth for tag matching.
 
 ## Current Status
 
-This is a working local tool, but it is still tuned from practical testing rather
-than a broad public benchmark.
+This is a working local tool tuned through practical ComfyUI testing. It is
+ready for public release as a workflow helper, but the presets should still be
+treated as model-family defaults rather than official checkpoint recipes.
 
 Known strengths:
 
 - WAI-Illustrious and Illustrious-style anime/furry prompting.
+- WAI-Anima Base 1.0 / Anima-style prompting, including `@style` tags.
 - Prompt coherence improvements from Smart Formatting.
 - Debuggability: you can see which words matched and which did not.
 - ComfyUI workflows where you want to copy, edit, and iterate on prompts.
+- Editable negative prompt bases for solving model-specific artifacts such as
+  unwanted text, captions, signatures, or watermark-like clutter.
 
 Known limitations:
 
@@ -58,8 +68,8 @@ Known limitations:
 - It does not guarantee perfect subject ownership, for example who holds a sword.
 - Model presets are best-effort defaults. Always prefer a checkpoint author's
   latest model card when it conflicts with this README.
-- WAI-Anima Base 1.0 is supported through the `wai_anima` preset, but it uses a
-  different score format from WAI-Illustrious and Pony.
+- WAI-Anima Base 1.0 uses a different score format from WAI-Illustrious and
+  Pony. Use the Anima presets for Anima models.
 
 ## Requirements
 
@@ -74,6 +84,7 @@ Tested locally with:
 - ComfyUI `0.22.0`
 - Ollama model `gemma4:e4b`
 - WAI-Illustrious SDXL workflow
+- WAI-Anima Base 1.0 workflow with the Anima text encoder and VAE
 
 ## Quick Start
 
@@ -168,6 +179,10 @@ Danbooru Prompt Builder negative_prompt -> negative CLIPTextEncode
 Danbooru Prompt Builder debug_matches -> ShowText
 ```
 
+In the included master workflow shape, the normal user prompt feeds the builder,
+the builder feeds the LoRA trigger section, and the final prompt is shown in an
+`ACTUAL Prompt To CLIP` display node before CLIP encoding.
+
 The node outputs:
 
 ```text
@@ -195,6 +210,16 @@ Useful controls:
   first in the negative output.
 - `include_negative`: append the selected preset's negative tags after
   `negative_prompt_base`.
+
+Practical negative prompt pattern:
+
+```text
+text, subtitles, writing, watermark, logo, signature, caption, speech bubble
+```
+
+That base is useful when a style or LoRA tends to generate unwanted written
+text. Leave `include_negative` enabled when you also want the model preset's
+quality negatives appended after your custom list.
 
 ## Smart Formatting
 
@@ -374,9 +399,17 @@ python -m danbooru_prompt_tool prompt --db data/danbooru_tags.sqlite --no-ollama
 
 ## Roadmap Before Public Release
 
-- Test the released WAI-Anima Base 1.0 checkpoint and tune `wai_anima`.
-- Attach a cleaned public workflow JSON for Civitai users.
-- Add a short install video or image guide if needed.
+Before publishing, confirm:
+
+- The cleaned public workflow JSON is attached to the Civitai post.
+- The GitHub repository includes this README, `.env.example`, and the custom
+  node wrapper instructions.
+- The generated SQLite database is not committed.
+- A license is selected.
+
+Nice-to-have later:
+
+- Add a short install video or image guide.
 - Add packaging metadata if this should be installed through pip later.
 
 ## License

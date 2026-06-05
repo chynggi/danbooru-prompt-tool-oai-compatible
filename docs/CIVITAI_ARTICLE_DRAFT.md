@@ -1,18 +1,18 @@
 # Natural Language to Danbooru Tags in ComfyUI
 
-## A local prompt builder for WAI-Illustrious, WAI-Anima, Pony, Animagine, NoobAI, and other anime SDXL models
+## A local prompt builder for WAI-Illustrious, WAI-Anima, Pony, Animagine, NoobAI, and other booru-trained anime models
 
-I have been building a ComfyUI workflow for anime/furry SDXL generation, and the
-hardest part was not the sampler or the checkpoint. It was prompting.
+This is a ComfyUI custom node and local prompt tool that turns a normal image
+description into a cleaner Danbooru-style prompt.
 
-I wanted to type a normal description like:
+It is built for people who want to type something natural like:
 
 ```text
 mermaid underwater, coral reef, blue hair, glowing fish, bubbles,
 sunlight rays, peaceful expression
 ```
 
-and get something closer to what anime SDXL checkpoints actually understand:
+and get a prompt closer to what booru-trained anime models understand:
 
 ```text
 masterpiece, best quality, amazing quality, sensitive, mermaid, underwater,
@@ -20,7 +20,7 @@ coral_reef, blue_hair, glowing_fish, bubble, sunlight, sunlight rays,
 peaceful expression, gentle bubbles, serene atmosphere
 ```
 
-So I made a local ComfyUI custom node and prompt tool:
+The node is called:
 
 ```text
 Danbooru Prompt Builder
@@ -29,24 +29,42 @@ Danbooru Prompt Builder
 It combines:
 
 - a local Danbooru tag SQLite database
-- local Ollama prompt planning
+- optional local Ollama tag planning
 - model-specific prompt presets
-- a second LLM pass called Smart Formatting
-- visible debug output so you can see what matched and what did not
+- dynamic Smart Formatting for unmatched details
+- editable negative prompt base text
+- visible debug output for every match and miss
 
-This is meant for users who like ComfyUI, use booru-trained anime models, and
-want a workflow that is easier to inspect than a black-box prompt enhancer.
+The goal is not to hide prompting behind a black box. The goal is to make the
+prompt-building process inspectable, editable, and easier to tune in ComfyUI.
 
-## The Problem
+## Screenshot
+
+Attach this screenshot to the Civitai post:
+
+```text
+Screenshot_20260605_083422.png
+```
+
+Suggested caption:
+
+```text
+The Danbooru Prompt Builder inside the grouped ComfyUI master workflow. The node
+shows the selected model preset, Ollama settings, dynamic Smart Formatting,
+editable negative prompt base, and debug output for tag matches.
+```
+
+## Why I Built It
 
 With SD 1.5, I could often stack keywords and weights until something worked.
-With SDXL anime models, that approach started breaking down.
+With newer anime SDXL-style and Anima-style models, that approach became less
+reliable.
 
 Long natural-language prompts often miss the exact tag vocabulary. Short booru
-prompts can be too sparse and lose important relationships, direction, lighting,
-and scene intent.
+prompts can be too sparse and lose relationships, pose direction, lighting, or
+scene intent.
 
-Examples I tested:
+Examples that exposed the problem:
 
 ```text
 boy with sword facing a dragon in ruined castle, fire, smoke,
@@ -64,8 +82,8 @@ bubbles, sunlight rays, peaceful expression
 ```
 
 Basic tag matching helped, but it still missed details like `facing a dragon`,
-`sunlight rays`, or `peaceful expression`. That is where Smart Formatting made
-the biggest difference.
+`sunlight rays`, or `peaceful expression`. Smart Formatting was added to recover
+those details without letting the LLM rewrite the entire prompt blindly.
 
 ## How It Works
 
@@ -73,16 +91,24 @@ The node does not simply ask an LLM to write a final prompt.
 
 Instead, it splits the work:
 
-1. Ollama reads your natural-language prompt and proposes candidate tags.
+1. Ollama reads the natural-language prompt and proposes candidate tags.
 2. A local SQLite database checks those candidates against real Danbooru tags.
 3. The resolver expands common concepts, synonyms, and model-specific control
    tags.
-4. Smart Formatting sends the unresolved parts back to Ollama and asks for short
+4. Smart Formatting sends unresolved pieces back to Ollama and asks for short
    visual fragments.
 5. The selected model preset adds quality tags, rating tags, score tags, and
    negative tags.
 
-The debug window shows the process:
+The debug output shows what happened:
+
+```text
+model preset: WAI-Anima / Anima preview
+dynamic smart formatting fragments: 4 (words: 0, chunks: 0)
+preserved @ style tags: @bluethebone
+```
+
+For a longer prompt it may show:
 
 ```text
 ollama candidates: mermaid, underwater, coral_reef, blue_hair, glowing_fish
@@ -94,35 +120,112 @@ glowing_fish -> glowing_fish
 smart formatting: sunlight rays, peaceful expression, gentle bubbles
 ```
 
-That makes it much easier to see whether a bad generation came from:
+This makes it easier to see whether a weak generation came from:
 
-- the initial prompt
-- missing Danbooru tags
-- the model preset
-- the checkpoint
-- the sampler/settings
-- or just normal diffusion randomness
+- the initial user prompt
+- a missing Danbooru tag
+- an over-broad tag match
+- the selected model preset
+- the checkpoint itself
+- sampler/settings choices
+- normal diffusion randomness
 
-## Screenshot
+## Main Features
 
-Attach the screenshot here:
+- Natural language to Danbooru-style tags.
+- Local Danbooru tag database with post-count-aware matching.
+- Optional local Ollama support.
+- Dynamic Smart Formatting from short prompts to long scene briefs.
+- Model presets for WAI-Illustrious, WAI-Anima, Illustrious base, NoobAI,
+  Animagine XL 4.0, Kohaku XL, Pony V6, and custom defaults.
+- `@style` preservation for Anima models.
+- Pony source/rating tag preservation.
+- Editable negative prompt base with preset negatives appended afterward.
+- Debug output that explains matches, misses, preserved tags, and repair
+  fragments.
+- CLI support outside ComfyUI.
+
+## Dynamic Smart Formatting
+
+Smart Formatting is the part that improved prompt coherence the most in testing.
+
+Instead of using the same number of repair fragments for every prompt, dynamic
+mode estimates prompt complexity from word count and comma/semicolon/newline
+chunks. The default range is:
 
 ```text
-Screenshot_20260603_233600.png
+4-20 fragments
 ```
 
-Suggested caption:
+Short prompts stay compact. Long prompts get more room to preserve atmosphere,
+relationships, pose direction, and scene intent.
+
+You can still disable it or force a manual cap.
+
+Prompt phrases:
 
 ```text
-The Danbooru Prompt Builder node inside the master ComfyUI workflow. The node
-shows the selected model preset, Smart Formatting controls, final prompt output,
-and a debug log of tag matches.
+no smart formatting
+no dynamic smart formatting
 ```
+
+## Editable Negative Prompt Base
+
+The builder has a `negative_prompt_base` field.
+
+This is useful when a model, LoRA, or style tends to produce unwanted artifacts.
+For example, some styles may generate good composition but also add jumbled text,
+captions, or watermark-like marks.
+
+A practical base to try:
+
+```text
+text, subtitles, writing, watermark, logo, signature, caption, speech bubble
+```
+
+The output order is:
+
+```text
+your editable negative base, preset negative tags
+```
+
+If `include_negative` is disabled, only your editable base is sent. This makes
+it easy to test handcrafted negatives without losing the field itself.
+
+## WAI-Anima and Anima Style Tags
+
+WAI-Anima / Anima-style models use a different prompt recipe from
+WAI-Illustrious and Pony.
+
+The Anima presets use:
+
+```text
+masterpiece, best quality, score_9, score_8, score_7
+```
+
+Negative defaults:
+
+```text
+worst quality, low quality, score_1, score_2, score_3, artist name,
+blurry, jpeg artifacts, lowres, censor
+```
+
+Anima style tags beginning with `@` are preserved instead of being sent through
+normal Danbooru matching.
+
+Supported forms:
+
+```text
+@style_token
+monster @style_token
+(@style_token:1.2)
+@artist name, 1girl, forest
+```
+
+This prevents the builder from accidentally turning `@style_token` into an
+unprefixed Danbooru tag and weakening the intended style behavior.
 
 ## Model Presets
-
-Different anime SDXL families want different prompt recipes, so the node has a
-`model_preset` dropdown.
 
 Current presets:
 
@@ -133,91 +236,20 @@ Current presets:
 | `noobai_xl` | NoobAI XL checkpoints |
 | `animagine_xl_4` | Animagine XL 4.0 |
 | `kohaku_xl` | Kohaku XL style anime SDXL models |
-| `wai_anima` | WAI-Anima / Anima preview, experimental |
+| `anima_base` | Anima Base and Anima-derived models |
+| `wai_anima` | WAI-Anima Base 1.0 |
 | `pony_v6` | Pony Diffusion V6 and Pony derivatives |
 | `custom` | Use your own `.env` defaults |
 
-The current tested default is:
+The default is:
 
 ```text
 wai_illustrious
 ```
 
-because the workflow was tuned around WAI-Illustrious first.
-
-## WAI-Illustrious Preset
-
-The WAI-Illustrious preset uses:
-
-```text
-masterpiece, best quality, amazing quality
-```
-
-Negative prompt:
-
-```text
-bad quality, worst quality, worst detail, sketch, censor
-```
-
-Rating tags:
-
-```text
-general, sensitive, nsfw, explicit
-```
-
-Optional score control:
-
-```text
-score_9, score_8_up, score_7_up, score_6_up
-```
-
-Type `use scoring` in your prompt if you want those score tags added.
-
-## WAI-Anima Status
-
-WAI-Anima is interesting because it is not just another Illustrious prompt
-recipe. The current WAI-Anima page lists Anima-specific requirements and says
-the free Base 1.0 version is planned for June 4, 2026.
-
-The experimental preset currently follows the published prompt recipe:
-
-```text
-masterpiece, best quality, score_9, score_8, score_7
-```
-
-Negative prompt:
-
-```text
-worst quality, low quality, score_1, score_2, score_3, artist name,
-blurry, jpeg artifacts, lowres, censor
-```
-
-This preset should be treated as experimental until the free checkpoint is
-downloaded and tested locally.
-
-## Pony Preset
-
-Pony is handled separately because Pony prompting is not the same as ordinary
-Danbooru prompting.
-
-The `pony_v6` preset always adds:
-
-```text
-score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up
-```
-
-It also preserves Pony special tags that are not normal Danbooru tags:
-
-```text
-source_anime, source_cartoon, source_furry, source_pony,
-rating_safe, rating_questionable, rating_explicit
-```
-
-Example:
-
-```text
-fox girl eating ramen at a festival stall, source_anime, rating_safe
-```
+Use `wai_anima` or `anima_base` for Anima models. Use `pony_v6` for Pony-style
+prompting and source/rating tags. Use `custom` if you want only your `.env`
+defaults.
 
 ## Recommended Workflow Shape
 
@@ -232,7 +264,7 @@ The cleaned public workflow should include:
 7. Optional upscale section.
 8. Final output/save section.
 
-Recommended node wiring:
+Recommended wiring:
 
 ```text
 TextInputBasic
@@ -247,17 +279,43 @@ Danbooru Prompt Builder debug_matches
   -> ShowText
 ```
 
+The final prompt should also be routed into a ShowText node so users can see
+exactly what reaches CLIP.
+
 ## How To Use It
 
 1. Install the custom node into `ComfyUI/custom_nodes/`.
 2. Start Ollama locally if you want LLM tag planning and Smart Formatting.
 3. Load the cleaned workflow.
-4. Select your `model_preset`.
+4. Select the correct `model_preset`.
 5. Type a normal prompt.
 6. Generate once.
 7. Read the debug matches.
-8. Edit the prompt if a concept matched badly.
+8. Edit the prompt, negative base, or Smart Formatting settings.
 9. Disable Smart Formatting if you want strict tag-only output.
+
+## Prompt Controls
+
+These phrases can be typed directly into the prompt:
+
+```text
+use scoring
+no default tags
+no quality tags
+no negative defaults
+no rating tags
+no smart formatting
+no dynamic smart formatting
+```
+
+For WAI/Illustrious-style models, `use scoring` adds:
+
+```text
+score_9, score_8_up, score_7_up, score_6_up
+```
+
+Some presets, such as Pony and Anima, always add their own score tags because
+those model families expect a specific score format.
 
 ## Example Prompts
 
@@ -286,6 +344,18 @@ fox girl eating ramen at a festival stall, yukata, lanterns,
 night, steam, happy expression
 ```
 
+Anima-style example:
+
+```text
+@bluethebone, 1girl, forest, soft light, painterly, detailed background
+```
+
+Inline Anima-style example:
+
+```text
+girl in fear of a monster @bluethebone, dark room, dramatic lighting
+```
+
 ## What Improved In Testing
 
 Smart Formatting improved:
@@ -294,25 +364,65 @@ Smart Formatting improved:
 - missing atmospheric details
 - relationships that are not clean Danbooru tags
 - subject details that the LLM found but SQLite could not resolve
-- debug visibility
+- prompt/debug visibility
+
+The editable negative base helped with:
+
+- text artifacts
+- captions
+- watermark-like marks
+- style-specific clutter
 
 It did not fully solve:
 
 - face restoration in distant/full-body images
 - subject-object ownership mistakes
-- cases where a model strongly prefers a different composition
+- cases where a checkpoint strongly prefers a different composition
 
-For faces, an advanced user may still want a detail pass such as an ADetailer
-style workflow.
+For faces, advanced users may still want a detail pass such as an ADetailer-style
+workflow.
 
-## Release Plan
+## Install Notes
 
-This will be released after:
+The GitHub repo includes:
 
-- WAI-Anima Base 1.0 is available and tested.
-- The `wai_anima` preset is tuned from real generations.
-- A cleaned public workflow is exported.
-- The GitHub README and install steps are finalized.
+```text
+danbooru_prompt_tool/
+comfyui_node/
+scripts/
+.env.example
+README.md
+```
+
+The generated SQLite database is not included. Build or sync it locally.
+
+Basic CLI setup:
+
+```bash
+cp .env.example .env
+python -m danbooru_prompt_tool seed --db data/danbooru_tags.sqlite
+```
+
+For a larger local database:
+
+```bash
+python -m danbooru_prompt_tool sync-danbooru \
+  --db data/danbooru_tags.sqlite \
+  --min-count 50
+```
+
+Danbooru has rate limits, so the sync command sleeps between requests and can
+resume from the last imported tag id.
+
+## Known Limitations
+
+- Presets are best-effort model-family defaults, not official settings from
+  every checkpoint author.
+- Smart Formatting improves prompt coherence, but it can still add fragments
+  that need manual editing.
+- The tag database is only as current as your local sync.
+- A generated prompt still depends heavily on checkpoint, LoRA, sampler, CFG,
+  resolution, seed, and workflow wiring.
 
 ## Links
 
@@ -335,3 +445,4 @@ Reference pages:
 - Animagine XL 4.0: https://huggingface.co/cagliostrolab/animagine-xl-4.0
 - Illustrious XL: https://huggingface.co/OnomaAIResearch/Illustrious-xl-early-release-v0
 - Kohaku XL: https://huggingface.co/KBlueLeaf/Kohaku-XL-Zeta
+
