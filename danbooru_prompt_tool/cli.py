@@ -36,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     p_prompt.add_argument("--no-quality", action="store_true")
     p_prompt.add_argument("--no-defaults", action="store_true")
     p_prompt.add_argument("--no-negative", action="store_true")
+    p_prompt.add_argument("--no-tag-matching", action="store_true")
     p_prompt.add_argument("--no-ollama", action="store_true")
     p_prompt.add_argument("--ollama-model")
     p_prompt.add_argument("--ollama-url")
@@ -73,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
             include_quality=not args.no_quality,
             include_defaults=not args.no_defaults,
             include_negative=not args.no_negative,
+            tag_matching=not args.no_tag_matching,
             use_ollama=not args.no_ollama,
             ollama_model=args.ollama_model,
             ollama_url=args.ollama_url,

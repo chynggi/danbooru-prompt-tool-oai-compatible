@@ -15,6 +15,7 @@ NO_DEFAULTS_RE = re.compile(r"\b(no|without|disable)\s+(default|recommended)\s+t
 NO_QUALITY_RE = re.compile(r"\b(no|without|disable)\s+quality\s+tags?\b", re.IGNORECASE)
 NO_NEGATIVE_RE = re.compile(r"\b(no|without|disable)\s+negative\s+(defaults?|tags?)\b", re.IGNORECASE)
 NO_RATING_RE = re.compile(r"\b(no|without|disable)\s+(rating|safety)\s+tags?\b", re.IGNORECASE)
+NO_TAG_MATCHING_RE = re.compile(r"\b(no|without|disable|skip)\s+(danbooru\s+)?tag\s+match(?:ing)?\b", re.IGNORECASE)
 NO_SMART_FORMAT_RE = re.compile(r"\b(no|without|disable)\s+smart\s+format(?:ting)?\b", re.IGNORECASE)
 NO_DYNAMIC_SMART_FORMAT_RE = re.compile(
     r"\b(no|without|disable)\s+dynamic\s+smart\s+format(?:ting)?\b",
@@ -52,6 +53,7 @@ def build_prompt(
     dynamic_smart_format_min_fragments: int | None = None,
     dynamic_smart_format_max_fragments: int | None = None,
     negative_prompt_base: str = "",
+    tag_matching: bool | None = None,
 ) -> PromptResult:
     settings = get_settings()
     use_scoring = bool(USE_SCORING_RE.search(text))
@@ -59,6 +61,7 @@ def build_prompt(
     no_quality = bool(NO_QUALITY_RE.search(text))
     no_negative = bool(NO_NEGATIVE_RE.search(text))
     no_rating = bool(NO_RATING_RE.search(text))
+    no_tag_matching = bool(NO_TAG_MATCHING_RE.search(text))
     no_smart_format = bool(NO_SMART_FORMAT_RE.search(text))
     no_dynamic_smart_format = bool(NO_DYNAMIC_SMART_FORMAT_RE.search(text))
     clean_text = clean_control_phrases(text)
@@ -79,6 +82,9 @@ def build_prompt(
     if model_preset is None:
         model_preset = settings.model_preset
     preset = get_preset(model_preset)
+    if tag_matching is None:
+        tag_matching = settings.tag_matching
+    tag_matching = bool(tag_matching) and not no_tag_matching
     style_tags = extract_at_style_tags(clean_text) if preset.preserve_at_style_tags else []
     lookup_text = remove_at_style_tags(clean_text) if style_tags else clean_text
     if default_rating is None:
@@ -98,13 +104,19 @@ def build_prompt(
         dynamic_smart_format_min_fragments = settings.dynamic_smart_format_min_fragments
     if dynamic_smart_format_max_fragments is None:
         dynamic_smart_format_max_fragments = settings.dynamic_smart_format_max_fragments
-    smart_format_max_fragments, dynamic_word_count, dynamic_chunk_count = resolve_smart_format_max_fragments(
-        lookup_text,
-        smart_format_max_fragments,
-        dynamic_smart_formatting,
-        dynamic_smart_format_min_fragments,
-        dynamic_smart_format_max_fragments,
-    )
+    if tag_matching:
+        smart_format_max_fragments, dynamic_word_count, dynamic_chunk_count = resolve_smart_format_max_fragments(
+            lookup_text,
+            smart_format_max_fragments,
+            dynamic_smart_formatting,
+            dynamic_smart_format_min_fragments,
+            dynamic_smart_format_max_fragments,
+        )
+    else:
+        smart_formatting = False
+        smart_format_max_fragments = 0
+        dynamic_word_count = 0
+        dynamic_chunk_count = 0
 
     phrases: list[str] = []
     notes: list[str] = []
@@ -115,7 +127,7 @@ def build_prompt(
             f"{smart_format_max_fragments} "
             f"(words: {dynamic_word_count}, chunks: {dynamic_chunk_count})"
         )
-    if use_ollama:
+    if tag_matching and use_ollama:
         try:
             planned_tags = ollama_tag_candidates(lookup_text, ollama_model, ollama_url)
             if planned_tags:
@@ -129,8 +141,6 @@ def build_prompt(
     if style_tags:
         notes.append("preserved @ style tags: " + ", ".join(style_tags))
 
-    phrases.extend(extract_phrases(lookup_text))
-    phrases = dedupe(phrases)
     passthrough_tags = dedupe(style_tags + extract_passthrough_tags(clean_text, preset.name))
 
     tags: list[str] = []
@@ -138,32 +148,39 @@ def build_prompt(
     seen = set()
     covered_words: set[str] = set()
 
-    for phrase in phrases:
-        if is_covered_single_word(phrase, covered_words):
-            continue
-        rows = db.search(phrase, limit=12, min_count=min_count)
-        if not rows:
-            notes.append(f"no tag match: {phrase}")
-            unresolved_phrases.append(phrase)
-            continue
-        row = choose_row(phrase, rows)
-        if row is None:
-            notes.append(f"no precise tag match: {phrase}")
-            unresolved_phrases.append(phrase)
-            continue
-        tag = row["name"]
-        if tag in seen:
-            continue
-        if conflicts_with_existing(tag, seen):
-            notes.append(f"skipped conflicting tag: {phrase} -> {tag} ({row['post_count']})")
-            continue
-        seen.add(tag)
-        covered_words.update(words_for_phrase(phrase))
-        covered_words.update(words_for_phrase(tag.replace("_", " ")))
-        tags.append(tag)
-        notes.append(f"{phrase} -> {tag} ({row['post_count']})")
-        if len(tags) >= limit:
-            break
+    if tag_matching:
+        phrases.extend(extract_phrases(lookup_text))
+        phrases = dedupe(phrases)
+
+        for phrase in phrases:
+            if is_covered_single_word(phrase, covered_words):
+                continue
+            rows = db.search(phrase, limit=12, min_count=min_count)
+            if not rows:
+                notes.append(f"no tag match: {phrase}")
+                unresolved_phrases.append(phrase)
+                continue
+            row = choose_row(phrase, rows)
+            if row is None:
+                notes.append(f"no precise tag match: {phrase}")
+                unresolved_phrases.append(phrase)
+                continue
+            tag = row["name"]
+            if tag in seen:
+                continue
+            if conflicts_with_existing(tag, seen):
+                notes.append(f"skipped conflicting tag: {phrase} -> {tag} ({row['post_count']})")
+                continue
+            seen.add(tag)
+            covered_words.update(words_for_phrase(phrase))
+            covered_words.update(words_for_phrase(tag.replace("_", " ")))
+            tags.append(tag)
+            notes.append(f"{phrase} -> {tag} ({row['post_count']})")
+            if len(tags) >= limit:
+                break
+    else:
+        tags = split_prompt_tags(clean_text)
+        notes.append("tag matching: disabled; input passed through without database lookup")
 
     score_tags = list(preset.score_tags or SCORE_TAGS)
     positive_defaults = settings.positive_defaults
@@ -220,6 +237,7 @@ def clean_control_phrases(text: str) -> str:
     out = NO_QUALITY_RE.sub(" ", out)
     out = NO_NEGATIVE_RE.sub(" ", out)
     out = NO_RATING_RE.sub(" ", out)
+    out = NO_TAG_MATCHING_RE.sub(" ", out)
     out = NO_SMART_FORMAT_RE.sub(" ", out)
     out = NO_DYNAMIC_SMART_FORMAT_RE.sub(" ", out)
     return out

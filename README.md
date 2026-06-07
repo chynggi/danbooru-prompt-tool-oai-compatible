@@ -194,6 +194,9 @@ negative_prompt
 Useful controls:
 
 - `model_preset`: model family preset.
+- `tag_matching`: convert the input text into matched Danbooru tags. Disable
+  this when you want the node to act as a defaults/quality/negative assembler
+  and pass your comma-separated prompt text through without database lookup.
 - `use_ollama`: first-pass LLM tag candidate extraction.
 - `smart_formatting`: second-pass repair for unmatched details.
 - `smart_format_max_fragments`: manual number of natural-language repair
