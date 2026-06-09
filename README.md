@@ -409,22 +409,19 @@ python -m compileall danbooru_prompt_tool comfyui_node
 python -m danbooru_prompt_tool prompt --db data/danbooru_tags.sqlite --no-ollama "catgirl black hair red eyes"
 ```
 
-## Roadmap Before Public Release
-
-Before publishing, confirm:
-
-- The cleaned public workflow JSON is attached to the Civitai post.
-- The GitHub repository includes this README, `.env.example`, and the custom
-  node wrapper instructions.
-- The generated SQLite database is not committed.
-- A license is selected.
-
-Nice-to-have later:
+## Roadmap
 
 - Add a short install video or image guide.
 - Add packaging metadata if this should be installed through pip later.
 
+## Contributing
+
+Forks and contributions are welcome for noncommercial hobby, research, and
+learning use. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
-Add a license before publishing publicly. If you plan to accept outside
-contributions, choose the license before opening pull requests.
+Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+
+This permits personal, hobby, research, educational, and other noncommercial
+uses. Commercial use requires separate permission from the copyright holder.
