@@ -43,7 +43,7 @@ prompt-building process inspectable, editable, and easier to tune in ComfyUI.
 Attach this screenshot to the Civitai post:
 
 ```text
-Screenshot_20260605_083422.png
+Danboruu-tag-builder.png
 ```
 
 Suggested caption:
@@ -445,4 +445,3 @@ Reference pages:
 - Animagine XL 4.0: https://huggingface.co/cagliostrolab/animagine-xl-4.0
 - Illustrious XL: https://huggingface.co/OnomaAIResearch/Illustrious-xl-early-release-v0
 - Kohaku XL: https://huggingface.co/KBlueLeaf/Kohaku-XL-Zeta
-

@@ -7,7 +7,7 @@ Ollama model. The LLM proposes candidate tags, SQLite verifies them against
 real Danbooru tag counts, and Smart Formatting repairs the pieces that do not
 map cleanly to tags.
 
-![ComfyUI Danbooru Prompt Builder](Screenshot_20260605_083422.png)
+![ComfyUI Danbooru Prompt Builder](Danboruu-tag-builder.png)
 
 ## What It Does
 
@@ -15,6 +15,8 @@ map cleanly to tags.
 - Ranks tag matches by local Danbooru post counts.
 - Shows a debug log explaining every match and miss.
 - Adds model-specific positive, negative, score, and rating tags through presets.
+- Can skip tag matching while still adding defaults, quality tags, rating tags,
+  and negative output.
 - Preserves special tags for Pony-style models, such as `source_anime` and
   `rating_explicit`.
 - Preserves Anima `@style` tags, including inline and weighted forms such as
@@ -140,6 +142,7 @@ from the last imported tag id.
 
 ```env
 DANBOORU_PROMPT_MODEL_PRESET=wai_illustrious
+DANBOORU_PROMPT_TAG_MATCHING=1
 DANBOORU_PROMPT_USE_OLLAMA=1
 DANBOORU_PROMPT_OLLAMA_MODEL=gemma4:e4b
 DANBOORU_PROMPT_OLLAMA_URL=http://127.0.0.1:11434
@@ -285,6 +288,7 @@ no default tags
 no quality tags
 no negative defaults
 no rating tags
+no tag matching
 no smart formatting
 no dynamic smart formatting
 ```
@@ -297,6 +301,11 @@ score_9, score_8_up, score_7_up, score_6_up
 
 Some presets always add their own score tags because the model family expects
 them.
+
+`no tag matching` keeps the node active but skips SQLite/Ollama tag conversion.
+This is useful when you already wrote a manual comma-separated prompt and only
+want the selected preset to add quality defaults, rating tags, and negative
+output.
 
 ## Model Presets
 
