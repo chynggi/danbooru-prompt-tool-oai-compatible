@@ -429,13 +429,13 @@ resume from the last imported tag id.
 Project repository:
 
 ```text
-<GitHub URL here>
+https://github.com/Csanindzsa/danbooru-prompt-tool
 ```
 
 Workflow download:
 
 ```text
-<Civitai workflow attachment here>
+Attach the cleaned ComfyUI workflow JSON or workflow pack archive to the Civitai post.
 ```
 
 Reference pages:

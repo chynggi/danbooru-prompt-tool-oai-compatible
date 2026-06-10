@@ -93,7 +93,7 @@ Tested locally with:
 Clone the repo and enter it:
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Csanindzsa/danbooru-prompt-tool.git
 cd danbooru-prompt-tool
 ```
 
