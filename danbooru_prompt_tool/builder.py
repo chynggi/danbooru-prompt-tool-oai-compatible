@@ -3,9 +3,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .config import get_settings, normalize_rating
+from .config import get_settings, normalize_llm_provider, normalize_rating
 from .database import TagDatabase, expand_candidates
 from .ollama import ollama_smart_fragments, ollama_tag_candidates
+from .openai_compat import openai_smart_fragments, openai_tag_candidates
 from .presets import get_preset
 
 
@@ -43,6 +44,10 @@ def build_prompt(
     use_ollama: bool | None = None,
     ollama_model: str | None = None,
     ollama_url: str | None = None,
+    llm_provider: str | None = None,
+    openai_model: str | None = None,
+    openai_base_url: str | None = None,
+    openai_api_key: str | None = None,
     include_defaults: bool | None = None,
     include_negative: bool = True,
     default_rating: str | None = None,
@@ -79,6 +84,16 @@ def build_prompt(
         ollama_model = settings.ollama_model
     if ollama_url is None:
         ollama_url = settings.ollama_url
+    if llm_provider is None:
+        llm_provider = settings.llm_provider
+    else:
+        llm_provider = normalize_llm_provider(llm_provider)
+    if openai_model is None:
+        openai_model = settings.openai_model
+    if openai_base_url is None:
+        openai_base_url = settings.openai_base_url
+    if openai_api_key is None:
+        openai_api_key = settings.openai_api_key
     if model_preset is None:
         model_preset = settings.model_preset
     preset = get_preset(model_preset)
@@ -129,11 +144,16 @@ def build_prompt(
         )
     if tag_matching and use_ollama:
         try:
-            planned_tags = ollama_tag_candidates(lookup_text, ollama_model, ollama_url)
+            if llm_provider == "openai":
+                planned_tags = openai_tag_candidates(lookup_text, openai_model, openai_base_url, openai_api_key)
+            else:
+                planned_tags = ollama_tag_candidates(lookup_text, ollama_model, ollama_url)
             if planned_tags:
+                llm_model = openai_model if llm_provider == "openai" else ollama_model
                 phrases.extend(planned_tags)
-                notes.append(f"ollama model: {ollama_model}")
-                notes.append("ollama candidates: " + ", ".join(planned_tags))
+                notes.append(f"llm provider: {llm_provider}")
+                notes.append(f"{llm_provider} model: {llm_model}")
+                notes.append(f"{llm_provider} candidates: " + ", ".join(planned_tags))
         except RuntimeError as exc:
             notes.append(str(exc))
             notes.append("fallback: lexical phrase extraction")
@@ -210,14 +230,25 @@ def build_prompt(
         filtered_unresolved = filter_unresolved_phrases(unresolved_phrases, covered_words)
         if filtered_unresolved:
             try:
-                smart_fragments = ollama_smart_fragments(
-                    lookup_text,
-                    prompt_tags,
-                    filtered_unresolved,
-                    ollama_model,
-                    ollama_url,
-                    smart_format_max_fragments,
-                )
+                if llm_provider == "openai":
+                    smart_fragments = openai_smart_fragments(
+                        lookup_text,
+                        prompt_tags,
+                        filtered_unresolved,
+                        openai_model,
+                        openai_base_url,
+                        openai_api_key,
+                        smart_format_max_fragments,
+                    )
+                else:
+                    smart_fragments = ollama_smart_fragments(
+                        lookup_text,
+                        prompt_tags,
+                        filtered_unresolved,
+                        ollama_model,
+                        ollama_url,
+                        smart_format_max_fragments,
+                    )
                 if smart_fragments:
                     notes.append("smart formatting: " + ", ".join(smart_fragments))
             except RuntimeError as exc:

@@ -40,6 +40,10 @@ def main(argv: list[str] | None = None) -> int:
     p_prompt.add_argument("--no-ollama", action="store_true")
     p_prompt.add_argument("--ollama-model")
     p_prompt.add_argument("--ollama-url")
+    p_prompt.add_argument("--llm-provider", choices=["ollama", "openai"])
+    p_prompt.add_argument("--openai-model")
+    p_prompt.add_argument("--openai-base-url")
+    p_prompt.add_argument("--openai-api-key")
     p_prompt.add_argument("--rating", default=None, help="general, sensitive, nsfw, explicit, or empty")
     p_prompt.add_argument("--model-preset", choices=preset_names())
     p_prompt.add_argument("--no-smart-formatting", action="store_true")
@@ -78,6 +82,10 @@ def main(argv: list[str] | None = None) -> int:
             use_ollama=not args.no_ollama,
             ollama_model=args.ollama_model,
             ollama_url=args.ollama_url,
+            llm_provider=args.llm_provider,
+            openai_model=args.openai_model,
+            openai_base_url=args.openai_base_url,
+            openai_api_key=args.openai_api_key,
             default_rating=args.rating,
             model_preset=args.model_preset,
             smart_formatting=False if args.no_ollama else not args.no_smart_formatting,

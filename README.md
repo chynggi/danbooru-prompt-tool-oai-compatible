@@ -3,9 +3,10 @@
 Turn a plain-language image idea into a cleaner anime/booru prompt for ComfyUI.
 
 This custom node uses a local Danbooru tag database plus an optional local
-Ollama model. The LLM proposes candidate tags, SQLite verifies them against
+LLM backend. The LLM proposes candidate tags, SQLite verifies them against
 real Danbooru tag counts, and Smart Formatting repairs the pieces that do not
-map cleanly to tags.
+map cleanly to tags. The LLM backend can be Ollama or any OpenAI-compatible
+chat completions server.
 
 ![ComfyUI Danbooru Prompt Builder](Danboruu-tag-builder.png)
 
@@ -38,11 +39,11 @@ intent.
 
 This tool splits the job:
 
-1. Ollama reads your natural-language idea and proposes likely tags.
+1. The LLM backend reads your natural-language idea and proposes likely tags.
 2. SQLite checks those tags against a local Danbooru tag database.
 3. The resolver adds synonyms, common concept expansions, and conflict checks.
-4. Smart Formatting asks Ollama to recover the still-unmatched details as short
-   natural-language prompt fragments.
+4. Smart Formatting asks the LLM backend to recover the still-unmatched details
+   as short natural-language prompt fragments.
 5. The selected model preset adds the correct quality, rating, and negative tags.
 
 The LLM does not get final authority over the prompt. The database remains the
@@ -77,8 +78,8 @@ Known limitations:
 
 - Python 3.10 or newer.
 - A local Danbooru tag SQLite database created by this tool.
-- Optional: Ollama running locally for LLM candidate extraction and Smart
-  Formatting.
+- Optional: an LLM backend for LLM candidate extraction and Smart Formatting.
+  This can be Ollama or any OpenAI-compatible chat completions server.
 - Optional: ComfyUI for the custom node workflow.
 
 Tested locally with:
@@ -144,8 +145,12 @@ from the last imported tag id.
 DANBOORU_PROMPT_MODEL_PRESET=wai_illustrious
 DANBOORU_PROMPT_TAG_MATCHING=1
 DANBOORU_PROMPT_USE_OLLAMA=1
+DANBOORU_PROMPT_LLM_PROVIDER=ollama
 DANBOORU_PROMPT_OLLAMA_MODEL=gemma4:e4b
 DANBOORU_PROMPT_OLLAMA_URL=http://127.0.0.1:11434
+DANBOORU_PROMPT_OPENAI_MODEL=gpt-4o-mini
+DANBOORU_PROMPT_OPENAI_BASE_URL=http://127.0.0.1:1234/v1
+DANBOORU_PROMPT_OPENAI_API_KEY=
 DANBOORU_PROMPT_SMART_FORMATTING=1
 DANBOORU_PROMPT_SMART_FORMAT_MAX_FRAGMENTS=4
 DANBOORU_PROMPT_DYNAMIC_SMART_FORMATTING=1
@@ -159,6 +164,44 @@ DANBOORU_PROMPT_DEFAULT_RATING=general
 
 Use `DANBOORU_PROMPT_MODEL_PRESET=custom` if you want only the explicit `.env`
 positive and negative defaults.
+
+## OpenAI-Compatible Backends
+
+`DANBOORU_PROMPT_LLM_PROVIDER` selects the LLM backend for both tag candidate
+extraction and Smart Formatting:
+
+```text
+ollama   local Ollama /api/generate (default, unchanged behavior)
+openai   any OpenAI-compatible /v1/chat/completions server
+```
+
+With `openai`, these settings are used:
+
+```env
+DANBOORU_PROMPT_LLM_PROVIDER=openai
+DANBOORU_PROMPT_OPENAI_MODEL=your-model-name
+DANBOORU_PROMPT_OPENAI_BASE_URL=http://127.0.0.1:1234/v1
+DANBOORU_PROMPT_OPENAI_API_KEY=
+```
+
+`DANBOORU_PROMPT_OPENAI_BASE_URL` may include or omit the `/v1` suffix. If the
+suffix is missing it is added automatically. `DANBOORU_PROMPT_OPENAI_API_KEY`
+may stay empty for local servers that do not require authentication; when set,
+it is sent as a `Bearer` authorization header.
+
+Common base URLs:
+
+```text
+LM Studio            http://127.0.0.1:1234/v1
+llama.cpp server     http://127.0.0.1:8080/v1
+vLLM                 http://127.0.0.1:8000/v1
+Ollama /v1 bridge    http://127.0.0.1:11434/v1
+OpenAI               https://api.openai.com/v1
+```
+
+The model name is whatever the target server expects. SQLite still remains the
+authority for final tag matching, so a weaker LLM only changes how well the
+idea is proposed, not whether a tag is valid.
 
 ## ComfyUI Setup
 
@@ -200,7 +243,14 @@ Useful controls:
 - `tag_matching`: convert the input text into matched Danbooru tags. Disable
   this when you want the node to act as a defaults/quality/negative assembler
   and pass your comma-separated prompt text through without database lookup.
-- `use_ollama`: first-pass LLM tag candidate extraction.
+- `use_ollama`: enable the LLM planner and Smart Formatting LLM passes. Keep
+  the name for workflow compatibility; it gates whichever backend
+  `llm_provider` selects.
+- `llm_provider`: `ollama` or `openai`.
+- `ollama_model`, `ollama_url`: used when `llm_provider` is `ollama`.
+- `openai_model`, `openai_base_url`, `openai_api_key`: used when `llm_provider`
+  is `openai`. The API key is stored in the workflow, so prefer leaving it
+  empty and setting `DANBOORU_PROMPT_OPENAI_API_KEY` in `.env` instead.
 - `smart_formatting`: second-pass repair for unmatched details.
 - `smart_format_max_fragments`: manual number of natural-language repair
   fragments when dynamic mode is off. Set to `0` to skip repair fragments.
@@ -302,7 +352,7 @@ score_9, score_8_up, score_7_up, score_6_up
 Some presets always add their own score tags because the model family expects
 them.
 
-`no tag matching` keeps the node active but skips SQLite/Ollama tag conversion.
+`no tag matching` keeps the node active but skips SQLite/LLM tag conversion.
 This is useful when you already wrote a manual comma-separated prompt and only
 want the selected preset to add quality defaults, rating tags, and negative
 output.
@@ -356,7 +406,7 @@ Notes:
   as `monster @style_token`, and weighted tokens such as `(@style_token:1.2)`
   are passed through unchanged because Anima-family models use the `@` prefix
   to strengthen artist/style conditioning. The protected tags are skipped by
-  SQLite/Ollama tag matching so the tool does not add an unprefixed duplicate.
+  SQLite/LLM tag matching so the tool does not add an unprefixed duplicate.
 - `pony_v6` preserves Pony source and rating tags, including `source_anime`,
   `source_cartoon`, `source_furry`, `source_pony`, `rating_safe`,
   `rating_questionable`, and `rating_explicit`.

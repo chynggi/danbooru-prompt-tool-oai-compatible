@@ -8,6 +8,7 @@ from pathlib import Path
 TOOL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_PATH = TOOL_ROOT / ".env"
 RATING_TAGS = {"", "general", "sensitive", "nsfw", "explicit"}
+LLM_PROVIDERS = ("ollama", "openai")
 
 
 def load_env(path: str | Path = DEFAULT_ENV_PATH) -> None:
@@ -47,8 +48,12 @@ class Settings:
     model_preset: str
     tag_matching: bool
     use_ollama: bool
+    llm_provider: str
     ollama_model: str
     ollama_url: str
+    openai_model: str
+    openai_base_url: str
+    openai_api_key: str
     smart_formatting: bool
     smart_format_max_fragments: int
     dynamic_smart_formatting: bool
@@ -66,8 +71,12 @@ def get_settings(env_path: str | Path = DEFAULT_ENV_PATH) -> Settings:
         model_preset=os.environ.get("DANBOORU_PROMPT_MODEL_PRESET", "wai_illustrious"),
         tag_matching=env_bool("DANBOORU_PROMPT_TAG_MATCHING", True),
         use_ollama=env_bool("DANBOORU_PROMPT_USE_OLLAMA", True),
+        llm_provider=normalize_llm_provider(os.environ.get("DANBOORU_PROMPT_LLM_PROVIDER", "ollama")),
         ollama_model=os.environ.get("DANBOORU_PROMPT_OLLAMA_MODEL", "gemma4:e4b"),
         ollama_url=os.environ.get("DANBOORU_PROMPT_OLLAMA_URL", "http://127.0.0.1:11434"),
+        openai_model=os.environ.get("DANBOORU_PROMPT_OPENAI_MODEL", "gpt-4o-mini"),
+        openai_base_url=os.environ.get("DANBOORU_PROMPT_OPENAI_BASE_URL", "http://127.0.0.1:1234/v1"),
+        openai_api_key=os.environ.get("DANBOORU_PROMPT_OPENAI_API_KEY", ""),
         smart_formatting=env_bool("DANBOORU_PROMPT_SMART_FORMATTING", True),
         smart_format_max_fragments=env_int("DANBOORU_PROMPT_SMART_FORMAT_MAX_FRAGMENTS", 4, 0, 100),
         dynamic_smart_formatting=env_bool("DANBOORU_PROMPT_DYNAMIC_SMART_FORMATTING", True),
@@ -100,3 +109,8 @@ def normalize_rating(value: str) -> str:
         if rating in RATING_TAGS:
             return rating
     return "general"
+
+
+def normalize_llm_provider(value: str) -> str:
+    provider = (value or "").strip().lower()
+    return provider if provider in LLM_PROVIDERS else "ollama"
